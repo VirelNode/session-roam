@@ -230,6 +230,41 @@ check_shortcut "crf"   "alias crf="
 
 echo ""
 
+# ─── 9. Agent session isolation ──────────────────────────────
+printf '%s%s%s\n' "$BOLD" "Agent Session Isolation" "$NC"
+
+session_dir="$HOME/.claude/projects"
+personal_ns="$session_dir/-home-joe-Desktop"
+
+if [[ -d "$personal_ns" ]]; then
+    # Check for .jsonl files with federation/agent environment markers
+    agent_sessions=0
+    while IFS= read -r jsonl_file; do
+        # Check first line for federation markers
+        if head -1 "$jsonl_file" 2>/dev/null | grep -q "FEDERATION_AGENT_ID\|federation-workspace\|notes-federation"; then
+            agent_sessions=$((agent_sessions + 1))
+            warn "Possible agent session in personal namespace: $(basename "$(dirname "$jsonl_file")")"
+        fi
+    done < <(find "$personal_ns" -maxdepth 2 -name "*.jsonl" -newer "$personal_ns" -mmin -10080 2>/dev/null)
+
+    if [[ $agent_sessions -eq 0 ]]; then
+        ok "No agent sessions detected in personal namespace"
+    fi
+
+    # Warn if the personal namespace has an unusually high number of
+    # recent sessions (>50 in the last week) which could indicate automated usage
+    recent_count=$(find "$personal_ns" -maxdepth 2 -name "*.jsonl" -mmin -10080 2>/dev/null | wc -l)
+    if [[ $recent_count -gt 50 ]]; then
+        warn "High session volume in personal namespace (${recent_count} in last 7d) -- check for agent contamination"
+    else
+        info "${recent_count} session(s) in personal namespace (last 7d)"
+    fi
+else
+    info "No personal namespace directory found (normal on fresh installs)"
+fi
+
+echo ""
+
 # ─── Summary ──────────────────────────────────────────────────
 echo "────────────────────────────────────"
 if [[ $ERRORS -eq 0 && $WARNINGS -eq 0 ]]; then
