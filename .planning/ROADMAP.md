@@ -54,13 +54,12 @@ Plans:
 - [x] 06-01-PLAN.md — Document namespacing conventions, add agent isolation check to verify.sh, create federation CWD pin recommendation
 
 ### Phase 7: Smart Resume Wrapper
-**Goal:** `cr` is context-aware — skips agent sessions, prefers named sessions, warns on stale
-**Deliverables:** `cr` upgraded from alias to script
-- Replace simple alias with a smart bash script
-- Filter: skip sessions created by known agent processes (Qwen, Codex, federation workers)
-- Prefer: if a named session exists (`cn`), show it prominently
-- Warn: if most recent session is >24h old, prompt before resuming
-- Fallback: if filtering removes everything, show full list via `cs`
+**Goal:** `cr` is context-aware — warns on wrong namespace, warns on stale sessions, Syncthing delay built-in
+**Deliverables:** `cr.sh` smart wrapper, updated `install-aliases.sh`, updated `verify.sh`
+**Plans:** 1 plan
+
+Plans:
+- [x] 07-01-PLAN.md — Create cr.sh smart wrapper, update install-aliases.sh to deploy it, update verify.sh shortcut detection
 
 ## Success Criteria (v0.2.0)
 - [ ] `cr` on any node ONLY grabs personal sessions, never agent sessions
