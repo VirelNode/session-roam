@@ -6,7 +6,7 @@ status: unknown
 last_updated: "2026-04-11T05:36:10.551Z"
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 4
   total_plans: 1
   completed_plans: 1
   percent: 100
@@ -16,11 +16,19 @@ progress:
 
 ## Current Phase
 
-Phase 3: Verification + Safety
+Phase 5: GitHub Release
 
 ## Status
 
-Phase 2 complete (freeform). Phase 1 by node01 CC, Phase 2 by node05 CC.
+Phases 1-4 complete. Ready for v0.1.0 tag.
+
+## Phase 3 Summary
+
+verify.sh — 8-dimension health check (service, API, folder, peers, sessions, stignore, conflicts, shortcuts). Fixed SIGPIPE under pipefail. Tested clean on node05 (1 peer) and node01 (3 peers).
+
+## Phase 4 Summary
+
+README.md with discovery story, quick start, shortcuts reference, troubleshooting, limitations. MIT license.
 
 ## Phase 2 Summary
 
