@@ -5,8 +5,9 @@
 // SKIP: worktrees, subagents, caches, temp files, build artifacts
 
 // ─── Syncthing internals ──────────────────────────────────────
+// Note: .stfolder and .stignore are auto-excluded by Syncthing.
+// Do NOT add .stfolder here — Syncthing needs it as a folder marker.
 .stversions
-.stfolder
 
 // ─── Agent worktrees (GSD subagents, bulk of wasted sync) ─────
 *worktrees*
