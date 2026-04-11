@@ -15,6 +15,11 @@ Plans:
 **Goal:** Optimized sync with smart exclusions and quick resume alias
 **Requirements:** R2, R3
 **Deliverables:** `.stignore` template, `cr` alias installer
+**Plans:** 1 plan (freeform)
+
+Plans:
+- [x] stignore.template — Exclude worktrees, subagents, caches, webfetch; keep .jsonl + memory
+- [x] install-aliases.sh — Install cr/cs/cf/cn/cfork/crf to bash/zsh, deploy .stignore
 
 ### Phase 3: Verification + Safety
 **Goal:** Confirm sync is working and detect problems before they cause data loss

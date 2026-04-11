@@ -1,0 +1,48 @@
+// session-roam .stignore
+// Place this file at ~/.claude/projects/.stignore
+//
+// KEEP: .jsonl session files, memory/ dirs, MEMORY.md, CLAUDE.md
+// SKIP: worktrees, subagents, caches, temp files, build artifacts
+
+// ─── Syncthing internals ──────────────────────────────────────
+.stversions
+.stfolder
+
+// ─── Agent worktrees (GSD subagents, bulk of wasted sync) ─────
+*worktrees*
+
+// ─── Subagent session files (temp, not needed for resume) ─────
+**/subagents
+
+// ─── Webfetch cache (downloaded PDFs, HTML snapshots) ─────────
+**/webfetch-*
+
+// ─── Build artifacts and dependency caches ────────────────────
+**/node_modules
+**/__pycache__
+**/.venv
+**/venv
+**/.next
+**/dist
+**/build
+**/.turbo
+**/*.pyc
+
+// ─── Editor and OS junk ──────────────────────────────────────
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+**/*.swo
+**/*~
+
+// ─── Docker and container artifacts ───────────────────────────
+**/.docker
+**/docker-buildx
+
+// ─── Browser data (Chrome extension cache) ────────────────────
+**/chrome
+
+// ─── Conflict files (investigate, don't sync) ─────────────────
+// These indicate concurrent writes — see TROUBLESHOOTING.md
+// Uncomment to auto-ignore (not recommended, better to investigate)
+// **.sync-conflict-*

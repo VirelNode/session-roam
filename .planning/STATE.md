@@ -6,7 +6,7 @@ status: unknown
 last_updated: "2026-04-11T05:36:10.551Z"
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 1
   completed_plans: 1
   percent: 100
@@ -16,11 +16,19 @@ progress:
 
 ## Current Phase
 
-Phase 1: Setup Script
+Phase 3: Verification + Safety
 
 ## Status
 
-Initialized — ready for `/gsd-plan-phase 1`
+Phase 2 complete (freeform). Phase 1 by node01 CC, Phase 2 by node05 CC.
+
+## Phase 2 Summary
+
+Built freeform (no GSD ceremony — scope was clear, deliverables known).
+- `stignore.template` — excludes worktrees (80+ dirs), subagents, webfetch cache, build artifacts. Keeps .jsonl sessions and memory/ dirs.
+- `install-aliases.sh` — installs 6 shortcuts (cr/cs/cf/cn/cfork/crf) to bash/zsh, deploys .stignore. Idempotent, non-destructive.
+- Deployed .stignore to node01 + node05 immediately.
+- Aliases already live on both nodes from earlier manual install.
 
 ## Decisions
 
