@@ -14,10 +14,10 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-ok()   { printf "${GREEN}[OK]${NC} %s\n" "$1"; }
-fail() { printf "${RED}[FAIL]${NC} %s\n" "$1" >&2; }
-info() { printf "${BLUE}[..]${NC} %s\n" "$1"; }
-warn() { printf "${YELLOW}[!!]${NC} %s\n" "$1"; }
+ok()   { printf '%s[OK]%s %s\n' "$GREEN" "$NC" "$1"; }
+fail() { printf '%s[FAIL]%s %s\n' "$RED" "$NC" "$1" >&2; }
+info() { printf '%s[..]%s %s\n' "$BLUE" "$NC" "$1"; }
+warn() { printf '%s[!!]%s %s\n' "$YELLOW" "$NC" "$1"; }
 die()  { fail "$1"; exit 1; }
 
 trap 'fail "Setup failed at line $LINENO"' ERR
@@ -211,4 +211,138 @@ esac
 api_key=$(get_api_key)
 wait_for_syncthing "$api_key"
 
-# --- Folder configuration and device pairing (Task 2) ---
+# ---------------------------------------------------------------------------
+# Device ID helper
+# ---------------------------------------------------------------------------
+get_device_id() {
+    syncthing cli show system 2>/dev/null \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['myID'])"
+}
+
+# ---------------------------------------------------------------------------
+# Device pairing function (D-03, D-04)
+# ---------------------------------------------------------------------------
+add_peer_device() {
+    local device_id="$1"
+    local device_name="${2:-peer}"
+
+    # Add device globally (idempotent check)
+    if syncthing cli config devices list 2>/dev/null | grep -q "^${device_id}$"; then
+        ok "Device ${device_id:0:7}... already known"
+    else
+        syncthing cli config devices add \
+            --device-id "$device_id" \
+            --name "$device_name" \
+            --auto-accept-folders
+        ok "Device ${device_id:0:7}... added"
+    fi
+
+    # Share claude-sessions folder with this device
+    syncthing cli config folders claude-sessions devices add \
+        --device-id "$device_id" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# Configure shared folder (D-09, D-10, D-11)
+# ---------------------------------------------------------------------------
+info "Configuring claude-sessions shared folder..."
+if syncthing cli config folders list 2>/dev/null | grep -q "^claude-sessions$"; then
+    ok "claude-sessions folder already configured"
+    # Still ensure fsWatcherDelayS and type are correct
+    syncthing cli config folders claude-sessions fswatcher-delays set 2
+    syncthing cli config folders claude-sessions type set sendreceive
+else
+    syncthing cli config folders add \
+        --id "claude-sessions" \
+        --label "Claude Sessions" \
+        --path "$HOME/.claude/projects" \
+        --type sendreceive \
+        --fswatcher-delays 2 \
+        --fswatcher-enabled
+    ok "claude-sessions folder created"
+fi
+
+# Create .stfolder marker (prevents "folder marker missing" error)
+mkdir -p "$HOME/.claude/projects/.stfolder"
+
+# Trigger rescan to clear any pre-existing error state
+curl -sf -X POST -H "X-API-Key: ${api_key}" \
+    "http://127.0.0.1:8384/rest/db/scan?folder=claude-sessions" >/dev/null 2>&1 || true
+ok "Folder marker and rescan complete"
+
+# ---------------------------------------------------------------------------
+# Device pairing (D-03, D-04)
+# ---------------------------------------------------------------------------
+if [[ ${#DEVICE_IDS[@]} -eq 0 ]]; then
+    my_id=$(get_device_id)
+    echo ""
+    printf '%s%s%s\n' "$BOLD" "This node's device ID:" "$NC"
+    printf '  %s%s%s\n' "$GREEN" "$my_id" "$NC"
+    echo ""
+    echo "Paste peer device IDs (one per line, empty line to finish):"
+    while true; do
+        read -r line
+        [[ -z "$line" ]] && break
+        DEVICE_IDS+=("$line")
+    done
+fi
+
+if [[ ${#DEVICE_IDS[@]} -gt 0 ]]; then
+    info "Adding ${#DEVICE_IDS[@]} peer device(s)..."
+    local_index=0
+    for dev_id in "${DEVICE_IDS[@]}"; do
+        local_index=$((local_index + 1))
+        add_peer_device "$dev_id" "peer-${local_index}"
+    done
+fi
+
+# ---------------------------------------------------------------------------
+# Check restart-required and restart if needed
+# ---------------------------------------------------------------------------
+restart_needed=$(curl -sf -H "X-API-Key: ${api_key}" \
+    "http://127.0.0.1:8384/rest/config/restart-required" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('requiresRestart', False))" 2>/dev/null || echo "False")
+
+if [[ "$restart_needed" == "True" ]]; then
+    info "Restarting Syncthing to apply configuration..."
+    curl -sf -X POST -H "X-API-Key: ${api_key}" \
+        "http://127.0.0.1:8384/rest/system/restart" >/dev/null
+    sleep 2
+    wait_for_syncthing "$api_key"
+fi
+
+# ---------------------------------------------------------------------------
+# Final summary (D-04, D-06)
+# ---------------------------------------------------------------------------
+my_id=$(get_device_id)
+echo ""
+echo "======================================"
+printf '%s%s%s\n' "$BOLD" "session-roam setup complete" "$NC"
+echo "======================================"
+echo ""
+printf '%s%s%s\n' "$BOLD" "Device ID:" "$NC"
+printf '  %s%s%s\n' "$GREEN" "$my_id" "$NC"
+echo ""
+printf '%s%s%s\n' "$BOLD" "Shared Folder:" "$NC"
+printf "  Path: %s\n" "$HOME/.claude/projects"
+printf "  ID:   claude-sessions\n"
+printf "  Type: sendreceive\n"
+printf "  fsWatcherDelayS: 2\n"
+echo ""
+printf '%s%s%s\n' "$BOLD" "Peers:" "$NC"
+
+# List configured peer devices (excluding this node)
+peer_found=false
+while IFS= read -r dev_id; do
+    if [[ -n "$dev_id" && "$dev_id" != "$my_id" ]]; then
+        printf "  %s\n" "$dev_id"
+        peer_found=true
+    fi
+done < <(syncthing cli config devices list 2>/dev/null)
+
+if [[ "$peer_found" == "false" ]]; then
+    echo "  (none -- run setup.sh on another node and exchange device IDs)"
+fi
+
+echo ""
+ok "Setup complete. Run this script on your other nodes to connect them."
