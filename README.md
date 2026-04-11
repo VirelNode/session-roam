@@ -45,7 +45,7 @@ source ~/.bashrc
 
 | Command | What It Does |
 |---------|-------------|
-| `cr` | Continue your most recent conversation (2s sync delay) |
+| `cr` | Smart resume — namespace check, stale warning, 2s sync delay |
 | `cs` | Browse all past sessions interactively |
 | `cf "keyword"` | Search sessions by keyword |
 | `cn "name"` | Start a new named session |
