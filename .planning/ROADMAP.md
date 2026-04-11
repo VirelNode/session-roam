@@ -6,6 +6,10 @@
 **Goal:** One-command Syncthing configuration for Claude Code session sync
 **Requirements:** R1
 **Deliverables:** `setup.sh` — install, configure, and verify Syncthing
+**Plans:** 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Create setup.sh: install Syncthing, configure claude-sessions folder, device pairing, service management
 
 ### Phase 2: Ignore Patterns + Resume Wrapper
 **Goal:** Optimized sync with smart exclusions and quick resume alias
