@@ -18,13 +18,12 @@ MARKER="# session-roam aliases"
 
 ALIASES_BLOCK='
 # session-roam aliases — https://github.com/VirelNode/session-roam
-# cr  = continue recent (2s Syncthing delay)
+# cr  = continue recent (smart wrapper in ~/.local/bin/cr)
 # cs  = browse all sessions
 # cf  = find/search sessions by keyword
 # cn  = start a named session
 # cfork = fork a past session (resume without overwriting)
 # crf = branch off your last conversation
-alias cr='"'"'sleep 2 && claude -c'"'"'
 alias cs='"'"'claude -r'"'"'
 cf() { claude -r "$*"; }
 cn() { claude -n "$*"; }
@@ -66,6 +65,19 @@ else
     warn "stignore.template not found in script directory (skipping)"
 fi
 
+# ─── Deploy cr.sh smart wrapper ───────────────────────────────
+CR_SRC="${SCRIPT_DIR}/cr.sh"
+CR_DST="$HOME/.local/bin/cr"
+
+if [[ -f "$CR_SRC" ]]; then
+    mkdir -p "$HOME/.local/bin"
+    cp "$CR_SRC" "$CR_DST"
+    chmod +x "$CR_DST"
+    ok "Deployed cr.sh to ~/.local/bin/cr"
+else
+    warn "cr.sh not found in script directory (skipping)"
+fi
+
 # ─── Install aliases ──────────────────────────────────────────
 echo ""
 printf '%s%s%s\n' "$BOLD" "Installing Claude Code session shortcuts..." "$NC"
@@ -95,11 +107,19 @@ if [[ "$installed" == "false" ]]; then
     warn "Created ~/.bash_aliases — make sure your .bashrc sources it"
 fi
 
+# ─── Remove old cr alias (now handled by ~/.local/bin/cr) ─────
+for rc_file in "$HOME/.bash_aliases" "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [[ -f "$rc_file" ]] && grep -qF "alias cr=" "$rc_file"; then
+        sed -i "/^alias cr=/d" "$rc_file"
+        ok "Removed old cr alias from $(basename "$rc_file") (now using ~/.local/bin/cr)"
+    fi
+done
+
 # ─── Summary ──────────────────────────────────────────────────
 echo ""
 printf '%s%s%s\n' "$BOLD" "Shortcuts installed:" "$NC"
 echo ""
-echo "  cr            Continue your most recent conversation (cross-node)"
+echo "  cr            Smart resume -- namespace check + stale warning (cross-node)"
 echo "  cs            Browse all past sessions interactively"
 echo '  cf "keyword"  Search sessions by keyword'
 echo '  cn "name"     Start a new named session'
