@@ -51,7 +51,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md — Document namespacing conventions, add agent isolation check to verify.sh, create federation CWD pin recommendation
+- [x] 06-01-PLAN.md — Document namespacing conventions, add agent isolation check to verify.sh, create federation CWD pin recommendation
 
 ### Phase 7: Smart Resume Wrapper
 **Goal:** `cr` is context-aware — skips agent sessions, prefers named sessions, warns on stale

@@ -68,7 +68,9 @@ No server. No cloud. No single point of failure. Just P2P file sync.
 |------|---------|
 | `setup.sh` | Install Syncthing, configure shared folder, pair devices |
 | `install-aliases.sh` | Install session shortcuts + `.stignore` |
-| `verify.sh` | Health check (8 dimensions: service, API, folder, peers, sessions, ignore, conflicts, shortcuts) |
+| `verify.sh` | Health check (9 dimensions: service, API, folder, peers, sessions, ignore, conflicts, shortcuts, agent isolation) |
+| `CONVENTIONS.md` | Session namespacing conventions for multi-agent isolation |
+| `FEDERATION-CWD-PIN.md` | Specification for pinning federation Zellij pane CWD |
 | `stignore.template` | Syncthing ignore patterns — skip worktrees, caches, keep sessions + memory |
 
 ## The Rules
