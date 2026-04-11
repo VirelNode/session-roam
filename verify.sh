@@ -221,7 +221,16 @@ check_shortcut() {
     fi
 }
 
-check_shortcut "cr"    "alias cr="
+# cr is now a deployed script, not an alias
+if [[ -x "$HOME/.local/bin/cr" ]]; then
+    ok "cr (smart wrapper at ~/.local/bin/cr)"
+elif grep -q "alias cr=" "$HOME/.bash_aliases" 2>/dev/null || \
+     grep -q "alias cr=" "$HOME/.bashrc" 2>/dev/null || \
+     grep -q "alias cr=" "$HOME/.zshrc" 2>/dev/null; then
+    warn "cr found as alias (upgrade: run install-aliases.sh to get the smart wrapper)"
+else
+    warn "cr not found (run install-aliases.sh)"
+fi
 check_shortcut "cs"    "alias cs="
 check_shortcut "cf"    "^cf()"
 check_shortcut "cn"    "^cn()"
