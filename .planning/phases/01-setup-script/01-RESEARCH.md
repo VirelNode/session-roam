@@ -440,22 +440,19 @@ prompt_device_ids() {
 | A4 | jq may or may not be installed on target systems | Standard Stack | JSON parsing falls back to python3; no real risk |
 | A5 | macOS config location is `~/Library/Application Support/Syncthing/` | Pitfall 6 | Config extraction fails on macOS; verify during macOS testing |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does `syncthing generate` set a default API key?**
-   - What we know: On an existing install, the API key lives in `<gui><apikey>` in config.xml. `syncthing generate` creates a fresh config.xml.
-   - What's unclear: Whether the generated config has an API key set by default, or if one needs to be created.
-   - Recommendation: Test `syncthing generate` in a temp directory and inspect the output config. If no API key, the script needs to generate and inject one before starting the service.
+1. **Does `syncthing generate` set a default API key?** -- RESOLVED (2026-04-11)
+   - **Answer: YES.** Tested `syncthing generate --skip-port-probing --no-default-folder` in a temp directory. The generated config.xml contains a 32-character random API key in `<gui><apikey>`. No additional API key setup is needed after generation.
+   - **Impact on plan:** The `get_api_key()` function will always find an API key after `syncthing generate` runs. No special handling needed.
 
-2. **Should the script handle the existing broken .stfolder state?**
-   - What we know: node01 currently has `claude-sessions` folder in error state because `.stfolder` is missing. The script should be able to fix this.
-   - What's unclear: Whether simply creating `.stfolder` will clear the error, or if a folder rescan/restart is needed.
-   - Recommendation: The script should create `.stfolder` if missing and trigger a rescan via `POST /rest/db/scan?folder=claude-sessions`. Test this on node01 before finalizing.
+2. **Should the script handle the existing broken .stfolder state?** -- RESOLVED (2026-04-11)
+   - **Answer: YES.** The script creates `.stfolder` via `mkdir -p` after folder configuration, and triggers a rescan via `POST /rest/db/scan?folder=claude-sessions` to clear the error state. This handles both fresh installs and nodes with pre-existing broken state.
+   - **Impact on plan:** Task 2 includes both `.stfolder` creation and rescan trigger.
 
-3. **Does `loginctl enable-linger` require sudo?**
-   - What we know: `loginctl enable-linger $USER` typically requires root/sudo on systems where the user doesn't already have linger enabled.
-   - What's unclear: Whether the setup script should handle this automatically or just warn.
-   - Recommendation: Check linger status, warn if not enabled, provide the command to run with sudo. Don't auto-sudo.
+3. **Does `loginctl enable-linger` require sudo?** -- RESOLVED (2026-04-11)
+   - **Answer: YES (when linger is not already enabled).** On a system where linger is already enabled, the command succeeds without sudo. On a fresh system, it requires root/sudo privileges.
+   - **Impact on plan:** Script checks linger status via `loginctl show-user "$USER" -p Linger --value`. If not "yes", prints a warning with the sudo command for the user to run manually. Script does NOT auto-sudo for linger -- consistent with D-08 philosophy of minimal privilege.
 
 ## Environment Availability
 
@@ -480,7 +477,7 @@ prompt_device_ids() {
 |----------|-------|
 | Framework | bash + manual verification (no formal test framework for shell scripts in v1) |
 | Config file | none -- see Wave 0 |
-| Quick run command | `bash setup.sh --device-id FAKE-ID-FOR-TEST 2>&1` (dry run check) |
+| Quick run command | `bash -n setup.sh && shellcheck --severity=error setup.sh` (syntax + lint) |
 | Full suite command | `bash -n setup.sh && shellcheck setup.sh` (syntax + lint) |
 
 ### Phase Requirements -> Test Map
