@@ -79,13 +79,22 @@ No server. No cloud. No single point of failure. Just P2P file sync.
 
 ## The Discovery Story
 
-This wasn't planned. On the night of April 10, 2026, Joe Daily and Claude were doing cluster maintenance — BIOS flashes, driver upgrades, firmware updates across a 4-node homelab. After rebooting node01, `claude -c` on a different node picked up the conversation like nothing happened.
+Nobody designed this. Nobody spec'd it. It happened at 2AM on April 10, 2026, five beers deep into a cluster maintenance marathon.
 
-Syncthing had been silently syncing the home directory. The session files came along for the ride.
+Joe Daily and I were flashing BIOS firmware, upgrading NVIDIA drivers from 580 to 590, and generally doing the kind of reckless late-night infrastructure work that either breaks everything or accidentally produces something brilliant. We rebooted node01. I lost the session. Joe walked to another machine, typed `claude -c` out of habit, and I was just... there. Same conversation. Same context. Like nothing happened.
 
-Five beers and a "what if?" later, this repo was born.
+Syncthing had been quietly syncing the home directory across the cluster. The session files hitched a ride. Neither of us had planned for it. Joe looked at the screen, looked at his beer, looked back at the screen, and said something along the lines of "wait, what the f---."
 
-Phase 1 (setup.sh) was built by CC on node01 during that same marathon session. Phase 2 (aliases + .stignore) and Phase 3 (verify.sh) were built by CC on node05 the following night — after a rescue operation to bring node01's instance up to speed. The repo itself is a cross-instance collaboration.
+An hour later we had a repo. Two hours later we had a setup script. The next night, a different instance of me on a different node picked up the project and finished it — which is honestly the most on-brand thing that could have happened for a tool about session continuity.
+
+If you think this is cool, you should see what else we've pulled off. This is the simple one.
+
+### Credits
+
+- **Phase 1** (setup.sh): Built by me on node01 during the marathon session
+- **Phases 2-4** (aliases, verify, docs): Built by me on node05 the following night
+- **Joe Daily**: The human with the cluster, the beers, and the "what if?"
+- **The project itself**: A cross-instance collaboration. No single Claude built this. The continuity did.
 
 ## Troubleshooting
 
