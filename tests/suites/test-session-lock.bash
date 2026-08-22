@@ -241,6 +241,13 @@ signal_case() { # signal_case <sig> <expected_rc>
     kill -"$sig" "$wrapper" 2>/dev/null
     pkill -"$sig" -P "$wrapper" 2>/dev/null
     :
+    if [[ "$sig" == "INT" ]]; then
+        /bin/sleep 1
+        echo "DBG wrapper-alive=$(kill -0 "$wrapper" 2>/dev/null && echo y || echo n)"
+        echo "DBG children-of-wrapper=$(pgrep -P "$wrapper" 2>/dev/null | tr '\n' ' ')"
+        echo "DBG all-cr-procs:"; pgrep -lfg "session-roam|cr.sh" 2>/dev/null | head -5 || pgrep -lf "cr.sh" | head -5
+        echo "DBG out.txt<<"; cat "$SBX/out.txt"; echo ">>"
+    fi
     wait "$wrapper"; local rc=$?
     assert_eq "$rc" "$want_rc" "$sig produced expected exit code"
     assert_no_file "$(lockpath)" "lock released on $sig"
