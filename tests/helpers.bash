@@ -82,6 +82,10 @@ t_run_in() {
     ERR="$(<"$SBX/err.txt")"
 }
 
+set_file_mtime() { # set_file_mtime <path> <epoch> -- works on GNU and BSD
+    python3 -c "import os,sys; e=float(sys.argv[2]); os.utime(sys.argv[1], (e,e))" "$1" "$2"
+}
+
 wait_for_file() {
     local f="$1" deadline=$(( SECONDS + ${2:-10} ))
     while (( SECONDS < deadline )); do

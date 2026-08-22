@@ -12,7 +12,7 @@ case "${CLAUDE_STUB_MODE:-exit0}" in
         exit 0
         ;;
     wait-signal)
-        trap 'exit 0' TERM INT HUP
+        trap 'exit 0' TERM HUP
         local_max="${CLAUDE_STUB_MAX_WAIT:-30}"
         waited=0
         while (( waited < local_max )); do

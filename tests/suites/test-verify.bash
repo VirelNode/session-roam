@@ -43,7 +43,7 @@ XML
     ns="$HOME/.claude/projects/-sbx-Desktop"
     mkdir -p "$ns"
     : > "$ns/fresh-session.jsonl"
-    touch -d "@$((now - 120))" "$ns/fresh-session.jsonl"
+    set_file_mtime "$ns/fresh-session.jsonl" $((now - 120))
 }
 
 run_verify() { t_run_in "$HOME" - "$VERIFY"; }
@@ -150,7 +150,7 @@ local_ns="$HOME/.claude/projects/-$(echo "$HOME/Desktop" | sed 's|^/||; s|/|-|g'
 now=$(date +%s)
 mkdir -p "$local_ns"
 printf '{"type":"user","msg":"hi"} FEDERATION_AGENT_ID=xyz\n' > "$local_ns/agentsession.jsonl"
-touch -d "@$((now - 60))" "$local_ns"   # ensure the jsonl is strictly newer than its dir (find -newer)
+set_file_mtime "$local_ns" $((now - 60))   # ensure the jsonl is strictly newer than its dir (find -newer)
 run_verify
 assert_eq "$RC" 0 "agent contamination is warning severity"
 assert_contains "$OUT" "Possible agent session in personal namespace" "contamination warning"

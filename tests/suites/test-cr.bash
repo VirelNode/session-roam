@@ -22,7 +22,7 @@ seed_session() {
     mkdir -p "$ns"
     id="sess-$RANDOM$RANDOM"
     : > "$ns/$id.jsonl"
-    touch -d "@$epoch" "$ns/$id.jsonl"
+    set_file_mtime "$ns/$id.jsonl" "$epoch"
 }
 
 # CR_ANSWERS: text fed to the script's stdin ("-" = EOF immediately)

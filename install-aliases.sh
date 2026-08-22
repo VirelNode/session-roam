@@ -4,7 +4,6 @@ set -euo pipefail
 # session-roam: Install Claude Code session shortcuts
 # https://github.com/VirelNode/session-roam
 
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BOLD='\033[1m'

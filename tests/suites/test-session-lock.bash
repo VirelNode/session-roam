@@ -171,7 +171,7 @@ t_start "stale remote lock prompts: y takes ownership and resumes"
 setup_env
 now=$(date +%s)
 ns="$(ns_for "$CWD")"; mkdir -p "$ns"
-: > "$ns/recent.jsonl"; touch -d "@$((now - 60))" "$ns/recent.jsonl"
+: > "$ns/recent.jsonl"; set_file_mtime "$ns/recent.jsonl" $((now - 60))
 write_lock "node03" 424242 7200
 printf 'y\n' > "$SBX/stdin.txt"
 (
@@ -275,7 +275,7 @@ build_verify_min_env() {
     printf '<config><gui><apikey>K</apikey></gui></config>\n' > "$HOME/.local/state/syncthing/config.xml"
     now=$(date +%s)
     ns="$HOME/.claude/projects/-sbx-Desktop"; mkdir -p "$ns"
-    : > "$ns/fresh.jsonl"; touch -d "@$((now - 120))" "$ns/fresh.jsonl"
+    : > "$ns/fresh.jsonl"; set_file_mtime "$ns/fresh.jsonl" $((now - 120))
 }
 
 t_start "verify dimension 10 reports locks by holder class and flags abandoned temps"
@@ -292,7 +292,7 @@ run_v
 assert_contains "$OUT" "likely ACTIVE on 'node09'" "fresh foreign lock surfaced as warning"
 old_tmp="$HOME/.claude/projects/-sbx-Desktop/.roam-lock.json.roam-lock.tmp"
 printf '{}' > "$old_tmp"
-touch -d "@$(( $(date +%s) - 7200 ))" "$old_tmp"
+set_file_mtime "$old_tmp" $(( $(date +%s) - 7200 ))
 run_v
 assert_contains "$OUT" "abandoned lock temp file" "crash-mid-write residue flagged"
 t_end
