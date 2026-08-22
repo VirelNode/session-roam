@@ -29,12 +29,34 @@ else
     LOCK_LIB_OK=false
 fi
 
-# ─── --force flag ─────────────────────────────────────────────
+# ─── Wrapper options ──────────────────────────────────────────
+# Modes share the whole safety ladder; only the claude subcommand differs:
+#   default      -> claude -c           (continue newest, acquires lock)
+#   --browse     -> claude -r           (interactive picker, acquires lock)
+#   --search KW  -> claude -r KW        (resume specific match, acquires lock)
 force=false
-if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
-    force=true
+mode_base="-c"
+prepend_arg=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --force|-f)
+            force=true
+            ;;
+        --browse)
+            mode_base="-r"
+            ;;
+        --search)
+            [[ $# -ge 2 ]] || { deny "--search requires a keyword argument."; exit 2; }
+            mode_base="-r"
+            prepend_arg="$2"
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
     shift
-fi
+done
 
 # ─── Directory namespace check ────────────────────────────────
 # Personal sessions live in ~/Desktop. Warn if we're elsewhere
@@ -168,5 +190,9 @@ sleep 2
 
 # ─── Resume ──────────────────────────────────────────────────
 RC=0
-claude -c "$@" || RC=$?
+if [[ -n "$prepend_arg" ]]; then
+    claude "$mode_base" "$prepend_arg" "$@" || RC=$?
+else
+    claude "$mode_base" "$@" || RC=$?
+fi
 exit "$RC"

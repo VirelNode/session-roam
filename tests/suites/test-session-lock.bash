@@ -32,24 +32,6 @@ lib_classify() { # lib_classify <dir> [fresh_secs] -> prints LOCK_CLASS
     ' _ "$dir"
 }
 
-wait_for_file() {
-    local f="$1" deadline=$(( SECONDS + ${2:-10} ))
-    while (( SECONDS < deadline )); do
-        [[ -f "$f" ]] && return 0
-        /bin/sleep 0.05
-    done
-    return 1
-}
-
-wait_for_gone() {
-    local f="$1" deadline=$(( SECONDS + ${2:-10} ))
-    while (( SECONDS < deadline )); do
-        [[ ! -e "$f" ]] && return 0
-        /bin/sleep 0.05
-    done
-    return 1
-}
-
 setup_env() {
     t_sandbox
     CWD="$HOME/Desktop"

@@ -24,8 +24,8 @@ ALIASES_BLOCK='
 # cn  = start a named session
 # cfork = fork a past session (resume without overwriting)
 # crf = branch off your last conversation
-alias cs='"'"'claude -r'"'"'
-cf() { claude -r "$*"; }
+alias cs='"'"'cr --browse'"'"'
+cf() { cr --search "$*"; }
 cn() { claude -n "$*"; }
 cfork() { claude --resume "$1" --fork-session; }
 alias crf='"'"'sleep 2 && claude -c --fork-session'"'"'

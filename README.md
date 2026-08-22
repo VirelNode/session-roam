@@ -48,8 +48,8 @@ Repeat for additional nodes. Each machine needs the device IDs of its peers.
 |---------|-------------|
 | `cr` | Resume most recent session (with namespace and staleness checks) |
 | `cr --force` | Resume immediately, skip all checks |
-| `cs` | Browse past sessions interactively |
-| `cf "keyword"` | Search sessions by keyword |
+| `cs` | Browse past sessions interactively (namespace lock enforced) |
+| `cf "keyword"` | Search sessions by keyword (namespace lock enforced) |
 | `cn "name"` | Start a new named session |
 | `cfork ID` | Fork a past session (original stays unmodified) |
 | `crf` | Fork the most recent session |

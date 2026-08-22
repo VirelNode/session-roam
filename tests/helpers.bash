@@ -80,6 +80,24 @@ t_run_in() {
     ERR="$(<"$SBX/err.txt")"
 }
 
+wait_for_file() {
+    local f="$1" deadline=$(( SECONDS + ${2:-10} ))
+    while (( SECONDS < deadline )); do
+        [[ -f "$f" ]] && return 0
+        /bin/sleep 0.05
+    done
+    return 1
+}
+
+wait_for_gone() {
+    local f="$1" deadline=$(( SECONDS + ${2:-10} ))
+    while (( SECONDS < deadline )); do
+        [[ ! -e "$f" ]] && return 0
+        /bin/sleep 0.05
+    done
+    return 1
+}
+
 suite_tally_exit() {
     printf 'SUITE_TALLY pass=%d fail=%d skip=%d\n' "$T_PASS" "$T_FAIL" "$T_SKIP"
     (( T_FAIL == 0 )) && exit 0

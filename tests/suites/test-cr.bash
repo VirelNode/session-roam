@@ -149,7 +149,44 @@ assert_not_contains "$OUT$ERR" "Last session is" "no stale check without namespa
 assert_file "$SBX/claude.log" "still resumes"
 t_end
 
-t_start "extra args are forwarded verbatim to claude -c"
+t_start "--browse mode resumes via claude -r under the same lock ladder"
+setup_cr_env
+run_cr --browse
+assert_eq "$RC" 0 "browse rc"
+assert_contains "$(cat "$SBX/claude.log")" "-r" "claude -r invoked"
+t_end
+
+t_start "--search keyword resumes via claude -r <keyword> and holds the lock while running"
+setup_cr_env
+now=$(date +%s)
+seed_session "$(ns_for "$CWD")" $((now - 120))
+(
+    cd "$CWD"
+    export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=8
+    export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
+    exec bash "$CR" --search "fix login bug"
+) >"$SBX/out.txt" 2>&1 </dev/null &
+wrapper=$!
+wait_for_file "$SBX/claude.log" 10; assert_eq "$?" 0 "search resumed"
+assert_contains "$(cat "$SBX/claude.log")" "-r fix login bug" "keyword passed through"
+assert_file "$(ns_for "$CWD")/.roam-lock.json" "lock held during search-resume"
+printf 'x' > "$SBX/release.flag"
+wait_for_gone "$(ns_for "$CWD")/.roam-lock.json" 10; assert_eq "$?" 0 "lock released after search-resume"
+wait "$wrapper"; assert_eq "$?" 0 "rc propagated"
+t_end
+
+t_start "force + search combination overrides a foreign lock and reaches claude -r"
+setup_cr_env
+mkdir -p "$(ns_for "$CWD")"
+cat > "$(ns_for "$CWD")/.roam-lock.json" <<'LOCK'
+{"node": "node02", "pid": 424242, "tty": "test", "started_epoch": 9999999999, "started_iso": "old", "session_file": "x.jsonl"}
+LOCK
+run_cr --force --search keyword
+assert_eq "$RC" 0 "force+search overrides foreign lock"
+assert_contains "$(cat "$SBX/claude.log")" "-r keyword" "search reached claude"
+t_end
+
+t_start "unknown flags still pass through to claude -c"
 setup_cr_env
 run_cr --model sonnet
 assert_contains "$(cat "$SBX/claude.log")" "-c --model sonnet" "args forwarded"

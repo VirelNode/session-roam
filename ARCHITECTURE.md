@@ -70,6 +70,7 @@ Sessions are indexed by **working directory path**. `claude -c` finds the most r
 - Checks CWD namespace (warns if not `~/Desktop` — the personal session space)
 - Detects stale sessions
 - Enforces the one-writer rule via a cross-node session lock (see below)
+- `cs` and `cf` route through this wrapper (`cr --browse` / `cr --search KW`) so every resume path holds the same lease
 - Supports `--force` to bypass warnings and lock blocks
 - Sleeps 2 seconds before `claude -c` to allow Syncthing propagation
 - Releases the lock on EXIT/INT/TERM/HUP — SIGHUP covers terminal close, SSH disconnect, and tmux kill, which terminate bash without running EXIT traps

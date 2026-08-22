@@ -78,3 +78,9 @@ Built freeform (no GSD ceremony — scope was clear, deliverables known).
 - Five latent issues fixed (EOF stdin, missing-dir install, GNU/macOS portability via lib helpers, derived personal namespace, targeted alias cleanup). Makefile added (`make install/verify/test/update`).
 - Re-derive: `git -C /home/joe/Projects/session-roam log --oneline | grep "harden scripts"` → expect match; `bash tests/run.sh` → expect `TOTAL: 66 passed, 0 failed` (+1 SKIP).
 - Branch is local-only; Joe pushes when ready.
+
+## 2026-08-23 later — cs/cf lock coverage + CI + secrets audit (same branch)
+
+- cs/cf route through cr --browse/--search (one ladder, one lease). CI matrix ubuntu+macos incl. /bin/bash 3.2 pass. setup.sh spaced-path trim fixed.
+- Re-derive: `git -C /home/joe/Projects/session-roam log --oneline | grep "cs/cf; ci matrix"` → expect match; `bash tests/run.sh` → expect 69/0/1.
+- Secrets sweep of working tree AND full git history: clean (token formats, PEM blocks, literal assignments — zero hits).

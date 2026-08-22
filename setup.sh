@@ -30,7 +30,7 @@ get_config_path() {
     local paths_output
     if paths_output=$(syncthing --paths 2>/dev/null); then
         local config_file
-        config_file=$(echo "$paths_output" | grep -A1 "Configuration file:" | tail -1 | tr -d '[:space:]')
+        config_file=$(echo "$paths_output" | grep -A1 "Configuration file:" | tail -1 | sed 's|^[[:space:]]*||; s|[[:space:]]*$||')
         if [[ -n "$config_file" && -f "$config_file" ]]; then
             echo "$config_file"
             return 0
@@ -168,7 +168,7 @@ done
 # Also try syncthing --paths
 if [[ "$config_exists" == "false" ]]; then
     local_paths_config=""
-    if local_paths_config=$(syncthing --paths 2>/dev/null | grep -A1 "Configuration file:" | tail -1 | tr -d '[:space:]'); then
+    if local_paths_config=$(syncthing --paths 2>/dev/null | grep -A1 "Configuration file:" | tail -1 | sed 's|^[[:space:]]*||; s|[[:space:]]*$||'); then
         if [[ -n "$local_paths_config" && -f "$local_paths_config" ]]; then
             config_exists=true
         fi
