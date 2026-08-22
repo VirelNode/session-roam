@@ -55,6 +55,7 @@ STIGNORE_SRC="${SCRIPT_DIR}/stignore.template"
 STIGNORE_DST="$HOME/.claude/projects/.stignore"
 
 if [[ -f "$STIGNORE_SRC" ]]; then
+    mkdir -p "$(dirname "$STIGNORE_DST")"
     if [[ -f "$STIGNORE_DST" ]]; then
         warn ".stignore already exists at $STIGNORE_DST (not overwriting)"
     else
@@ -122,8 +123,15 @@ fi
 # ─── Remove old cr alias (now handled by ~/.local/bin/cr) ─────
 for rc_file in "$HOME/.bash_aliases" "$HOME/.bashrc" "$HOME/.zshrc"; do
     if [[ -f "$rc_file" ]] && grep -qF "alias cr=" "$rc_file"; then
-        sed -i "/^alias cr=/d" "$rc_file"
-        ok "Removed old cr alias from $(basename "$rc_file") (now using ~/.local/bin/cr)"
+        tmp_file="${rc_file}.roam-tmp.$$"
+        awk '!/^alias cr=/ || index($0, "claude") == 0' "$rc_file" > "$tmp_file"
+        if cmp -s "$tmp_file" "$rc_file"; then
+            rm -f "$tmp_file"
+            info "Left unrelated alias cr= in $(basename "$rc_file") untouched"
+        else
+            mv "$tmp_file" "$rc_file"
+            ok "Removed legacy claude cr alias from $(basename "$rc_file") (now using ~/.local/bin/cr)"
+        fi
     fi
 done
 

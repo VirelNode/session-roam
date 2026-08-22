@@ -65,6 +65,36 @@ assert_eq "$RC" 0 "continue rc"
 assert_file "$SBX/claude.log" "claude invoked after confirmation"
 t_end
 
+t_start "EOF stdin falls back to prompt defaults instead of crashing"
+setup_cr_env
+CWD="$HOME/Projects/somewhere"; mkdir -p "$CWD"
+run_cr
+assert_eq "$RC" 0 "EOF at namespace prompt aborts cleanly (default N)"
+assert_contains "$OUT" "Aborted" "graceful abort message"
+assert_no_file "$SBX/claude.log" "claude never launched"
+t_end
+
+t_start "EOF stdin at stale prompt takes the default (continue)"
+setup_cr_env
+now=$(date +%s)
+seed_session "$(ns_for "$CWD")" $((now - 172800))
+run_cr
+assert_eq "$RC" 0 "EOF at stale prompt continues (default Y)"
+assert_file "$SBX/claude.log" "claude ran on default"
+t_end
+
+t_start "EOF stdin at remote-stale lock prompt aborts safely (default N) leaving foreign lock"
+setup_cr_env
+mkdir -p "$(ns_for "$CWD")"
+cat > "$(ns_for "$CWD")/.roam-lock.json" <<'LOCK'
+{"node": "node03", "pid": 424242, "tty": "test", "started_epoch": 1, "started_iso": "test", "session_file": "x.jsonl"}
+LOCK
+run_cr
+assert_eq "$RC" 0 "EOF at lock prompt declines cleanly"
+grep -q '"node": "node03"' "$(ns_for "$CWD")/.roam-lock.json"; assert_eq "$?" 0 "foreign lock untouched"
+assert_no_file "$SBX/claude.log" "no claude after decline"
+t_end
+
 t_start "Desktop cwd runs without namespace prompt"
 setup_cr_env
 run_cr

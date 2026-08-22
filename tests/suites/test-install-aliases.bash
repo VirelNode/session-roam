@@ -91,6 +91,24 @@ assert_file "$HOME/.local/lib/session-roam/session-lock.sh"
 cmp -s "$REPO_ROOT/lib/session-lock.sh" "$HOME/.local/lib/session-roam/session-lock.sh"; assert_eq "$?" 0 "lock lib deployed matches source"
 t_end
 
+t_start "creates ~/.claude/projects when missing instead of failing hard"
+t_sandbox
+rm -rf "$HOME/.claude/projects"
+run_installer
+assert_eq "$RC" 0 "installer survives missing projects dir"
+assert_file "$HOME/.claude/projects/.stignore" "stignore landed after implicit mkdir"
+t_end
+
+t_start "keeps an unrelated alias cr= and removes only the legacy claude one"
+t_sandbox
+printf "alias cr='/opt/tools/cr-launcher'\nalias cr='sleep 2 && claude -c'\nexport EDITOR=vim\n" > "$HOME/.bashrc"
+run_installer
+if grep -qF "/opt/tools/cr-launcher" "$HOME/.bashrc"; then :; else fail_msg "unrelated cr alias was deleted"; fi
+if grep -qF "alias cr='sleep 2 && claude -c'" "$HOME/.bashrc"; then fail_msg "legacy claude alias survived cleanup"; fi
+grep -qF "export EDITOR=vim" "$HOME/.bashrc"; assert_eq "$?" 0 "unrelated lines kept"
+assert_contains "$OUT$ERR" "Removed legacy claude cr alias" "targeted removal announced"
+t_end
+
 t_start "removes a pre-existing plain 'alias cr=' line"
 t_sandbox
 printf 'alias cs="claude -r"\nalias cr='"'"'sleep 2 && claude -c'"'"'\nexport EDITOR=vim\n' > "$HOME/.bashrc"

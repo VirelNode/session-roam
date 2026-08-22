@@ -19,6 +19,19 @@ info() { printf '  %s·%s %s\n' "$BLUE" "$NC" "$1"; }
 ERRORS=0
 WARNINGS=0
 
+# Shared runtime helpers (mtime, newest-file, lock primitives).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCKS_LIB_PRESENT=false
+for _lib_cand in "$SCRIPT_DIR/lib/session-lock.sh" "$HOME/.local/lib/session-roam/session-lock.sh"; do
+    if [[ -f "$_lib_cand" ]]; then
+        # shellcheck source=lib/session-lock.sh
+        source "$_lib_cand"
+        LOCKS_LIB_PRESENT=true
+        break
+    fi
+done
+unset _lib_cand
+
 echo ""
 printf '%s%s%s\n' "$BOLD" "session-roam health check" "$NC"
 echo "────────────────────────────────────"
@@ -155,10 +168,10 @@ session_count=$(find "$session_dir" -maxdepth 2 -name "*.jsonl" 2>/dev/null | wc
 if [[ $session_count -gt 0 ]]; then
     ok "${session_count} session file(s) found"
 
-    # Most recent — disable pipefail locally to avoid SIGPIPE from head
-    newest=$(set +o pipefail; find "$session_dir" -maxdepth 2 -name "*.jsonl" -printf "%T@ %p\n" 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    # Most recent
+    newest=$(roam_newest_file "$session_dir")
     if [[ -n "$newest" ]]; then
-        age_seconds=$(( $(date +%s) - $(stat -c %Y "$newest" 2>/dev/null || echo 0) ))
+        age_seconds=$(( $(date +%s) - $(roam_mtime "$newest") ))
         if [[ $age_seconds -lt 3600 ]]; then
             ok "Most recent session: $((age_seconds / 60))m ago"
         elif [[ $age_seconds -lt 86400 ]]; then
@@ -243,7 +256,7 @@ echo ""
 printf '%s%s%s\n' "$BOLD" "Agent Session Isolation" "$NC"
 
 session_dir="$HOME/.claude/projects"
-personal_ns="$session_dir/-home-joe-Desktop"
+personal_ns="$session_dir/-$(echo "$HOME/Desktop" | sed 's|^/||; s|/|-|g')"
 
 if [[ -d "$personal_ns" ]]; then
     # Check for .jsonl files with federation/agent environment markers
@@ -254,7 +267,7 @@ if [[ -d "$personal_ns" ]]; then
             agent_sessions=$((agent_sessions + 1))
             warn "Possible agent session in personal namespace: $(basename "$(dirname "$jsonl_file")")"
         fi
-    done < <(find "$personal_ns" -maxdepth 2 -name "*.jsonl" -newer "$personal_ns" -mmin -10080 2>/dev/null)
+    done < <(find "$personal_ns" -maxdepth 2 -name "*.jsonl" -mmin -10080 2>/dev/null)
 
     if [[ $agent_sessions -eq 0 ]]; then
         ok "No agent sessions detected in personal namespace"
@@ -277,19 +290,7 @@ echo ""
 # ─── 10. Session locks ────────────────────────────────────────
 printf '%s%s%s\n' "$BOLD" "Session Locks" "$NC"
 
-LOCK_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-locks_lib_found=false
-if [[ -f "$LOCK_SCRIPT_DIR/lib/session-lock.sh" ]]; then
-    # shellcheck source=lib/session-lock.sh
-    source "$LOCK_SCRIPT_DIR/lib/session-lock.sh"
-    locks_lib_found=true
-elif [[ -f "$HOME/.local/lib/session-roam/session-lock.sh" ]]; then
-    # shellcheck source=/dev/null
-    source "$HOME/.local/lib/session-roam/session-lock.sh"
-    locks_lib_found=true
-fi
-
-if [[ "$locks_lib_found" == false ]]; then
+if [[ "$LOCKS_LIB_PRESENT" == false ]]; then
     warn "session-lock library not found (run install-aliases.sh)"
 else
     shopt -s nullglob
@@ -323,7 +324,7 @@ else
     fi
 
     while IFS= read -r roam_tmp; do
-        roam_tmp_age=$(( $(date +%s) - $(stat -c %Y "$roam_tmp" 2>/dev/null || echo 0) ))
+        roam_tmp_age=$(( $(date +%s) - $(roam_mtime "$roam_tmp") ))
         if [[ $roam_tmp_age -gt 3600 ]]; then
             warn "abandoned lock temp file (crash mid-write?): $roam_tmp"
         fi

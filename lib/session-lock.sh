@@ -14,6 +14,24 @@ ROAM_FRESH_SECS="${ROAM_FRESH_SECS:-900}"
 
 lock_file() { printf '%s/%s' "$1" "$ROAM_LOCK_NAME"; }
 
+roam_mtime() { # epoch mtime of $1: GNU stat, BSD stat, then 0
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+}
+
+roam_newest_file() { # prints most recently modified *.jsonl under $1 (maxdepth 2), or nothing
+    local dir="$1" best="" best_m=0 f m
+    [[ -d "$dir" ]] || return 0
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        m=$(roam_mtime "$f")
+        if (( m > best_m )); then
+            best_m=$m
+            best="$f"
+        fi
+    done < <(find "$dir" -maxdepth 2 -name '*.jsonl' 2>/dev/null)
+    printf '%s' "$best"
+}
+
 lock_read_field() { # lock_read_field <file> <key>
     python3 - "$1" "$2" <<'PY'
 import json, sys
@@ -41,7 +59,7 @@ lock_classify() { # lock_classify <ns_dir> -> LOCK_CLASS LOCK_NODE LOCK_PID LOCK
     LOCK_TTY="$(lock_read_field "$LOCK_FILE_PATH" tty 2>/dev/null)" || LOCK_TTY=""
 
     if ! [[ "$epoch" =~ ^[0-9]+$ ]] || [[ "$epoch" -eq 0 ]]; then
-        epoch=$(stat -c %Y "$LOCK_FILE_PATH" 2>/dev/null || echo "$now")
+        epoch=$(roam_mtime "$LOCK_FILE_PATH")
     fi
     LOCK_AGE=$((now - epoch))
     (( LOCK_AGE < 0 )) && LOCK_AGE=0

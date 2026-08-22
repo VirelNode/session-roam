@@ -41,6 +41,17 @@ if grep -E '^\s*//\s*\*\*\.sync-conflict' "$REPO_ROOT/stignore.template" >/dev/n
 fi
 t_end
 
+t_start "portability lint: no bash4-only expansion, suffix-less sed -i, GNU-only find/stat"
+bad=""
+if grep -n ',,' setup.sh cr.sh verify.sh install-aliases.sh lib/session-lock.sh >/dev/null 2>&1; then bad="$bad lowercase-expansion"; fi
+if grep -nE 'sed -i [^.]' install-aliases.sh setup.sh >/dev/null 2>&1; then bad="$bad suffixless-sed-i"; fi
+if grep -n 'find.*-printf' cr.sh verify.sh >/dev/null 2>&1; then bad="$bad gnu-find-printf"; fi
+while IFS= read -r pline; do
+    case "$pline" in *"|| stat -f"*) ;; *) bad="$bad bare-stat-c";; esac
+done < <(grep -h 'stat -c' cr.sh verify.sh install-aliases.sh lib/session-lock.sh 2>/dev/null)
+[[ -z "$bad" ]] || fail_msg "portability offenders:$bad"
+t_end
+
 t_start "shellcheck clean (skipped when shellcheck absent)"
 if ! command -v shellcheck >/dev/null 2>&1; then
     t_skip "shellcheck not installed on this node"

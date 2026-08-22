@@ -65,3 +65,16 @@ Built freeform (no GSD ceremony — scope was clear, deliverables known).
 - All nodes run Ubuntu 24.04, same username (joe), identical paths
 - 100GbE between desktop nodes, Tailscale for laptop
 - Discovered accidentally 2026-04-10 during cluster maintenance
+
+## 2026-08-22 — test harness + one-writer session lock (instance: ox-alpha, opencode)
+
+- Feature merged to main by Joe. Re-derive: `git -C /home/joe/Projects/session-roam log --oneline -3 | grep "feat: enforce"` → expect a match.
+- Tests: `bash tests/run.sh` → expect `TOTAL: 60 passed, 0 failed` (+1 shellcheck SKIP if shellcheck absent).
+- Latent bugs reported to Joe, unfixed by choice: cr.sh EOF-stdin crash under set -e; installer requires ~/.claude/projects to pre-exist; GNU/bash4-only constructs vs macOS README claim; verify.sh §9 hardcoded namespace; installer sed eats any user `alias cr=` line.
+- Full detail: `/home/joe/.claude/projects/-home-joe-Projects-session-roam/memory/MEMORY.md`
+
+## 2026-08-23 — hardening pass (branch: fix/hardening-pass, instance: ox-alpha)
+
+- Five latent issues fixed (EOF stdin, missing-dir install, GNU/macOS portability via lib helpers, derived personal namespace, targeted alias cleanup). Makefile added (`make install/verify/test/update`).
+- Re-derive: `git -C /home/joe/Projects/session-roam log --oneline | grep "harden scripts"` → expect match; `bash tests/run.sh` → expect `TOTAL: 66 passed, 0 failed` (+1 SKIP).
+- Branch is local-only; Joe pushes when ready.

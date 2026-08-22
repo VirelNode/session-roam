@@ -146,7 +146,7 @@ t_end
 
 t_start "agent session in personal namespace is flagged"
 build_green_env
-local_ns="$HOME/.claude/projects/-home-joe-Desktop"
+local_ns="$HOME/.claude/projects/-$(echo "$HOME/Desktop" | sed 's|^/||; s|/|-|g')"
 now=$(date +%s)
 mkdir -p "$local_ns"
 printf '{"type":"user","msg":"hi"} FEDERATION_AGENT_ID=xyz\n' > "$local_ns/agentsession.jsonl"

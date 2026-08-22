@@ -43,8 +43,8 @@ if [[ "$force" == false && "$PWD" != "$HOME/Desktop"* ]]; then
     warn "You're not in ~/Desktop -- this is an agent/project namespace."
     printf "  Current directory: %s\n" "$PWD"
     printf "  Continue here anyway? [y/N] "
-    read -r answer
-    if [[ "${answer,,}" != "y" ]]; then
+    read -r answer || answer=""
+    if [[ "$answer" != y && "$answer" != Y ]]; then
         printf "Aborted. Use 'cs' to pick a specific session, or cd ~/Desktop first.\n"
         exit 0
     fi
@@ -56,17 +56,16 @@ namespace_dir="$HOME/.claude/projects/-$(echo "$PWD" | sed 's|^/||; s|/|-|g')"
 # ─── Stale session warning ────────────────────────────────────
 newest=""
 if [[ "$force" == false && -d "$namespace_dir" ]]; then
-    newest=$(find "$namespace_dir" -maxdepth 2 -name "*.jsonl" -printf "%T@ %p\n" 2>/dev/null \
-        | sort -rn | head -1 | cut -d' ' -f2-)
+    newest=$(roam_newest_file "$namespace_dir")
     if [[ -n "${newest:-}" ]]; then
-        age_seconds=$(( $(date +%s) - $(stat -c %Y "$newest") ))
+        age_seconds=$(( $(date +%s) - $(roam_mtime "$newest") ))
         if [[ $age_seconds -gt 86400 ]]; then
             days=$((age_seconds / 86400))
             hours=$(( (age_seconds % 86400) / 3600 ))
             warn "Last session is ${days}d ${hours}h old."
             printf "  Continue? [Y/n] "
-            read -r answer
-            if [[ "${answer,,}" == "n" ]]; then
+            read -r answer || answer=""
+            if [[ "$answer" == n || "$answer" == N ]]; then
                 printf "Aborted. Use 'cs' to browse sessions or 'cn \"name\"' to start fresh.\n"
                 exit 0
             fi
@@ -131,8 +130,8 @@ if [[ "$LOCK_LIB_OK" == true ]]; then
                 printf "    Holder: %s (held %s, since %s)\n" "${LOCK_NODE:-?}" "$(fmt_age "$LOCK_AGE")" "${LOCK_STARTED:-?}"
                 printf "    If that node crashed mid-session this is leftover; if it is merely idle, resuming twice WILL fork conflicts.\n"
                 printf "  Continue anyway? [y/N] "
-                read -r answer
-                if [[ "${answer,,}" != "y" ]]; then
+                read -r answer || answer=""
+                if [[ "$answer" != y && "$answer" != Y ]]; then
                     printf "Aborted. Clear the other side first, or use --force.\n"
                     exit 0
                 fi
@@ -145,8 +144,7 @@ if [[ "$LOCK_LIB_OK" == true ]]; then
     fi
 
     if [[ -z "$newest" && -d "$namespace_dir" ]]; then
-        newest=$(set +o pipefail; find "$namespace_dir" -maxdepth 2 -name "*.jsonl" -printf "%T@ %p\n" 2>/dev/null \
-            | sort -rn | head -1 | cut -d' ' -f2-)
+        newest=$(roam_newest_file "$namespace_dir")
     fi
     if ! lock_acquire "$namespace_dir" "${newest##*/}"; then
         warn "Could not write the session lock; continuing WITHOUT cross-node protection."

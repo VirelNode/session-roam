@@ -33,6 +33,11 @@ cd session-roam
 ./install-aliases.sh
 source ~/.bashrc
 ./verify.sh
+
+# Or drive the whole thing with make:
+make install   # runs setup + shortcut installation
+make verify    # health check
+make test      # offline test suite (no Syncthing daemon needed)
 ```
 
 Repeat for additional nodes. Each machine needs the device IDs of its peers.
@@ -62,6 +67,7 @@ No central server. No cloud dependency. Peer-to-peer only.
 
 | File | Purpose |
 |------|---------|
+| `Makefile` | `make install` / `make verify` / `make test` entry points |
 | `setup.sh` | Install Syncthing, configure shared folder, pair devices |
 | `install-aliases.sh` | Install session shortcuts + `.stignore` + lock library |
 | `verify.sh` | Health check (10 dimensions: service, API, folder, peers, sessions, ignore, conflicts, shortcuts, agent isolation, session locks) |
