@@ -147,8 +147,6 @@ print(count)
 
     # List devices
     total_devices=$(syncthing cli config devices list 2>/dev/null | wc -l)
-    my_id=$(syncthing cli show system 2>/dev/null \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)['myID'])" 2>/dev/null || echo "unknown")
     peer_count=$((total_devices - 1))  # subtract self
     if [[ $peer_count -gt 0 ]]; then
         info "${peer_count} peer(s) configured total"

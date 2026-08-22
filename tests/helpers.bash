@@ -54,7 +54,9 @@ assert_exec() { [[ -x "$1" ]] && return 0; fail_msg "not executable: $1"; }
 
 t_sandbox() {
     [[ -n "${SBX:-}" && -d "$SBX" ]] && rm -rf "$SBX"
-    SBX="$(mktemp -d "${TMPDIR:-/tmp}/session-roam-test.XXXXXXXX")"
+    local mk_base="${TMPDIR:-/tmp}"
+    mk_base="${mk_base%/}"
+    SBX="$(mktemp -d "$mk_base/session-roam-test.XXXXXXXX")"
     export HOME="$SBX/home"
     mkdir -p "$HOME/.local/bin" "$HOME/.claude/projects" "$SBX/fixtures" "$SBX/logs"
     export PATH="$STUB_DIR:$PATH"

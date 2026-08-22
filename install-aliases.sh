@@ -101,23 +101,23 @@ installed=false
 
 # bash
 if [[ -f "$HOME/.bash_aliases" ]]; then
-    install_to_file "$HOME/.bash_aliases" "~/.bash_aliases"
+    install_to_file "$HOME/.bash_aliases" "$HOME/.bash_aliases"
     installed=true
 elif [[ -f "$HOME/.bashrc" ]]; then
-    install_to_file "$HOME/.bashrc" "~/.bashrc"
+    install_to_file "$HOME/.bashrc" "$HOME/.bashrc"
     installed=true
 fi
 
 # zsh
 if [[ -f "$HOME/.zshrc" ]]; then
-    install_to_file "$HOME/.zshrc" "~/.zshrc"
+    install_to_file "$HOME/.zshrc" "$HOME/.zshrc"
     installed=true
 fi
 
 # Fallback: create .bash_aliases if nothing found
 if [[ "$installed" == "false" ]]; then
-    install_to_file "$HOME/.bash_aliases" "~/.bash_aliases"
-    warn "Created ~/.bash_aliases — make sure your .bashrc sources it"
+    install_to_file "$HOME/.bash_aliases" "$HOME/.bash_aliases"
+    warn "Created $HOME/.bash_aliases — make sure your .bashrc sources it"
 fi
 
 # ─── Remove old cr alias (now handled by ~/.local/bin/cr) ─────
