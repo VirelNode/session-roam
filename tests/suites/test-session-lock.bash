@@ -230,14 +230,17 @@ signal_case() { # signal_case <sig> <expected_rc>
     setup_env
     (
         cd "$CWD"
-        set -m
         export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=5
         export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
         exec bash "$CR"
     ) >"$SBX/out.txt" 2>&1 </dev/null &
     wrapper=$!
     wait_for_file "$(lockpath)" 10 || { fail_msg "lock never appeared before $sig"; kill -9 "$wrapper" 2>/dev/null; return 1; }
-    kill -"$sig" "-$wrapper" 2>/dev/null || kill -"$sig" "$wrapper" 2>/dev/null
+    # A terminal delivers ^C/^\ to the whole foreground process group: the
+    # shell AND the running child. Signal both explicitly.
+    kill -"$sig" "$wrapper" 2>/dev/null
+    pkill -"$sig" -P "$wrapper" 2>/dev/null
+    :
     wait "$wrapper"; local rc=$?
     assert_eq "$rc" "$want_rc" "$sig produced expected exit code"
     assert_no_file "$(lockpath)" "lock released on $sig"
