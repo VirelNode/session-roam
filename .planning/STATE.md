@@ -84,3 +84,11 @@ Built freeform (no GSD ceremony — scope was clear, deliverables known).
 - cs/cf route through cr --browse/--search (one ladder, one lease). CI matrix ubuntu+macos incl. /bin/bash 3.2 pass. setup.sh spaced-path trim fixed.
 - Re-derive: `git -C /home/joe/Projects/session-roam log --oneline | grep "cs/cf; ci matrix"` → expect match; `bash tests/run.sh` → expect 69/0/1.
 - Secrets sweep of working tree AND full git history: clean (token formats, PEM blocks, literal assignments — zero hits).
+
+## 2026-08-23 final — merged, pushed, CI green
+
+- main == origin/main at `git log --oneline -1 | grep "bash-3.2 INT"` (c9571a6 or later).
+- CI: ubuntu + macos runners green. Re-derive: `gh run list --limit 1` → expect `completed success` on latest.
+- Suite: 69 passed / 0 failed / 1 skipped locally; CI proves macOS bash-3.2 pass for real now.
+- cs/cf hold the lease via cr --browse/--search. Makefile entry points live.
+- All branches/backups deleted; single-branch repo on main.
