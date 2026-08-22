@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# stub loginctl: reports linger per LOGINCTL_LINGER (default yes)
+
+{ printf 'loginctl'; printf ' %s' "$@"; printf '\n'; } >> "${STUB_LOG:-/dev/null}"
+
+echo "Linger=${LOGINCTL_LINGER:-yes}"
+exit 0

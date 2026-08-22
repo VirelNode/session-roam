@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# stub curl: serves canned REST payloads from fixture dir, emulates -sf fail semantics
+
+url=""
+prev=""
+for a in "$@"; do
+    [[ "$a" == http* ]] && url="$a"
+done
+
+{ printf 'curl %s\n' "$url"; } >> "${CURL_STUB_LOG:-${STUB_LOG:-/dev/null}}"
+
+FIX="${CURL_FIXTURE:-$HOME/curl-fixtures}"
+
+serve() {
+    local f="$FIX/$1"
+    [[ -f "$f" ]] && { cat "$f"; return 0; }
+    return 22
+}
+
+case "$url" in
+    */rest/system/status)
+        serve system-status.json || exit 22
+        exit 0
+        ;;
+    */rest/config/restart-required)
+        if [[ -f "$FIX/restart-required.json" ]]; then cat "$FIX/restart-required.json"; else echo '{"requiresRestart": false}'; fi
+        exit 0
+        ;;
+    */rest/system/connections)
+        serve connections.json || exit 22
+        exit 0
+        ;;
+    */rest/db/scan*|*/rest/system/restart)
+        exit 0
+        ;;
+    "")
+        echo "stub curl: no URL in args: $*" >&2
+        exit 22
+        ;;
+    *)
+        exit 22
+        ;;
+esac

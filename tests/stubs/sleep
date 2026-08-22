@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# stub sleep: records long sleeps and returns instantly; honors sub-500ms sleeps for real
+
+{ printf 'sleep'; printf ' %s' "$@"; printf '\n'; } >> "${SLEEP_STUB_LOG:-${STUB_LOG:-/dev/null}}"
+
+if awk -v d="${1:-0}" 'BEGIN { exit !(d + 0 < 0.5) }'; then
+    exec /bin/sleep "$@"
+fi
+exit 0

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# stub pgrep: only understands -x syncthing; controlled by PGREP_SYNCTHING (default 1 = running)
+
+{ printf 'pgrep'; printf ' %s' "$@"; printf '\n'; } >> "${STUB_LOG:-/dev/null}"
+
+if [[ "${PGREP_SYNCTHING:-1}" == "1" ]]; then
+    echo "4242"
+    exit 0
+fi
+exit 1

@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# stub syncthing: fixture-backed state machine emulating the CLI surface session-roam uses.
+# Fixture dir defaults to $SYNC_FIXTURE or $HOME/.sync-fixture.
+
+FIX="${SYNC_FIXTURE:-$HOME/.sync-fixture}"
+mkdir -p "$FIX"
+
+{ printf 'syncthing'; printf ' %s' "$@"; printf '\n'; } >> "${STUB_LOG:-/dev/null}"
+
+fix_get() { cat "$FIX/$1" 2>/dev/null; }
+fix_set() { printf '%s' "$2" > "$FIX/$1"; }
+fix_add() { grep -qxF "$2" "$FIX/$1" 2>/dev/null || printf '%s\n' "$2" >> "$FIX/$1"; }
+
+scan_opt() { # scan_opt <opt> <args...> -> prints value or empty
+    local opt="$1"; shift
+    local prev="" a
+    for a in "$@"; do
+        [[ "$prev" == "$opt" ]] && { printf '%s' "$a"; return 0; }
+        prev="$a"
+    done
+}
+
+cmd="$1"; shift || true
+
+case "$cmd" in
+    --version)
+        echo "syncthing v1.27.0-stub"
+        ;;
+    --paths)
+        cfg="$(fix_get config-xml-path)"
+        if [[ -n "$cfg" ]]; then
+            echo "Configuration file:"
+            echo "$cfg"
+            exit 0
+        fi
+        exit 1
+        ;;
+    generate)
+        fix_set generated "1"
+        exit 0
+        ;;
+    cli)
+        sub="$1"; shift || true
+        case "$sub" in
+            show)
+                case "$1" in
+                    system) printf '{"myID": "%s"}\n' "$(fix_get myid)" ;;
+                esac
+                ;;
+            config)
+                area="$1"; shift || true
+                case "$area" in
+                    devices)
+                        verb="$1"; shift || true
+                        case "$verb" in
+                            list) fix_get devices.list ;;
+                            add)
+                                devid="$(scan_opt --device-id "$@")"
+                                [[ -n "$devid" ]] && fix_add devices.list "$devid"
+                                exit 0
+                                ;;
+                        esac
+                        ;;
+                    folders)
+                        verb="$1"; shift || true
+                        case "$verb" in
+                            list)
+                                fix_get folders.list
+                                ;;
+                            add)
+                                fid="$(scan_opt --id "$@")"
+                                [[ -z "$fid" ]] && exit 1
+                                fix_add folders.list "$fid"
+                                p="$(scan_opt --path "$@")"
+                                t="$(scan_opt --type "$@")"
+                                d="$(scan_opt --fswatcher-delays "$@")"
+                                [[ -n "$p" ]] && fix_set "folder.$fid.path" "$p"
+                                [[ -n "$t" ]] && fix_set "folder.$fid.type" "$t"
+                                [[ -n "$d" ]] && fix_set "folder.$fid.fswatcher-delays" "$d"
+                                exit 0
+                                ;;
+                            *)
+                                target="$verb"
+                                action="$1"; shift || true
+                                case "$action" in
+                                    path|type|fswatcher-delays)
+                                        op="$1"; shift || true
+                                        case "$op" in
+                                            get) fix_get "folder.$target.$action" ;;
+                                            set) fix_set "folder.$target.$action" "$1" ;;
+                                        esac
+                                        exit 0
+                                        ;;
+                                    devices)
+                                        devid="$(scan_opt --device-id "$@")"
+                                        [[ -n "$devid" ]] && fix_add "folder.$target.devices" "$devid"
+                                        exit 0
+                                        ;;
+                                esac
+                                ;;
+                        esac
+                        ;;
+                esac
+                ;;
+        esac
+        ;;
+    *)
+        echo "stub syncthing: unhandled invocation: $cmd $*" >&2
+        { printf 'SYNCTHING_UNHANDLED'; printf ' %s' "$cmd" "$@"; printf '\n'; } >> "${STUB_LOG:-/dev/null}"
+        exit 1
+        ;;
+esac
+exit 0

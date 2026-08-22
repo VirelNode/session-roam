@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# stub systemctl: fixture-controlled is-enabled; enable/start succeed.
+# Args arrive as e.g. "--user is-enabled syncthing.service" so we scan, not match $1.
+
+{ printf 'systemctl'; printf ' %s' "$@"; printf '\n'; } >> "${STUB_LOG:-/dev/null}"
+
+verb=""
+for a in "$@"; do
+    case "$a" in
+        is-enabled|enable|start) verb="$a"; break ;;
+    esac
+done
+
+case "$verb" in
+    is-enabled)
+        [[ "${SYSTEMCTL_ENABLED:-1}" == "1" ]] && exit 0
+        exit 1
+        ;;
+    enable|start)
+        exit 0
+        ;;
+esac
+exit 0

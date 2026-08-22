@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# stub claude: records invocation, never launches the real CLI
+
+{ printf 'claude'; printf ' %s' "$@"; printf '\n'; } >> "${CLAUDE_STUB_LOG:-${STUB_LOG:-/dev/null}}"
+
+case "${CLAUDE_STUB_MODE:-exit0}" in
+    exit0)
+        exit "${CLAUDE_STUB_EXIT:-0}"
+        ;;
+    sleep)
+        /bin/sleep "${CLAUDE_STUB_SLEEP:-2}"
+        exit 0
+        ;;
+    wait-signal)
+        trap 'exit 0' TERM INT HUP
+        local_max="${CLAUDE_STUB_MAX_WAIT:-30}"
+        waited=0
+        while (( waited < local_max )); do
+            [[ -f ${CLAUDE_STUB_RELEASE:-/nonexistent} ]] && exit 0
+            /bin/sleep 0.05
+            waited=$((waited + 1))
+        done
+        exit 0
+        ;;
+    *)
+        exit 2
+        ;;
+esac
