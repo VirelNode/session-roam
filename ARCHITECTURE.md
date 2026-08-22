@@ -64,16 +64,34 @@ Sessions are indexed by **working directory path**. `claude -c` finds the most r
   - `cfork ID` — fork a past session
   - `crf` — fork the most recent session
 - Copies `cr.sh` to `~/.local/bin/`
+- Copies `lib/session-lock.sh` to `~/.local/lib/session-roam/`
 
 ### cr.sh (Smart Resume Wrapper)
 - Checks CWD namespace (warns if not `~/Desktop` — the personal session space)
 - Detects stale sessions
-- Supports `--force` to bypass warnings
+- Enforces the one-writer rule via a cross-node session lock (see below)
+- Supports `--force` to bypass warnings and lock blocks
 - Sleeps 2 seconds before `claude -c` to allow Syncthing propagation
-- Handles edge cases: no sessions found, Syncthing not running
+- Releases the lock on EXIT/INT/TERM/HUP — SIGHUP covers terminal close, SSH disconnect, and tmux kill, which terminate bash without running EXIT traps
+
+### lib/session-lock.sh (Cross-node Session Lock)
+Advisory lease file inside the synced tree: `~/.claude/projects/<namespace>/.roam-lock.json`, written atomically (`*.roam-lock.tmp` then rename; temp pattern is `.stignore`d so the flicker never propagates or conflicts). Content identifies holder node, pid, tty, start time. Classification ladder on resume:
+
+| State | Meaning | cr.sh behavior |
+|---|---|---|
+| none | no lock | acquire |
+| self-stale | our node, pid dead (crash/reboot leftover) | clear silently, acquire fresh |
+| self-active | our node, pid alive | hard block (another terminal here) |
+| remote-fresh (< `ROAM_FRESH_SECS`, default 900) | other node recently | hard block |
+| remote-stale (>= threshold) | probably crashed holder | warn with evidence, `[y/N]` |
+| unknown | unreadable/corrupt lock file | fail closed |
+
+Any successful proceed takes ownership of the lock. Release uses an ownership guard so a late exit can never delete a newer holder's lock.
+
+**Failure modes:** A node that crashes mid-session leaves its lock behind; nothing on disk distinguishes "crashed yesterday" from "idle open for 3 days", so remote locks are never auto-deleted — they age out of the hard-block tier into a warned override, and `verify.sh` dimension 10 surfaces every lock with holder and age. If Syncthing is down the guard is blind cross-node (degrades to pre-lock behavior). Two resumes inside the ~2s propagation window remain a theoretical race, vastly narrower than before. PID reuse can make a dead wrapper look alive until that pid cycles.
 
 ### verify.sh
-9-dimension health check:
+10-dimension health check:
 1. Syncthing service running
 2. Syncthing API accessible
 3. `claude-sessions` folder configured
@@ -83,6 +101,7 @@ Sessions are indexed by **working directory path**. `claude -c` finds the most r
 7. Conflict file detection (`.sync-conflict` files)
 8. Shell shortcuts installed
 9. Agent isolation (federation sessions not polluting personal namespace)
+10. Session locks (holder, age, class; abandoned `.roam-lock.tmp` residue >1h)
 
 ### stignore.template
 Selective sync rules — only session-critical files cross the wire:
@@ -111,7 +130,7 @@ Session namespacing rules:
 - Default 10s was too slow for the "walk to another node" workflow
 
 ### One-Writer Rule
-Sessions must only be active on ONE node at a time. The JSONL format is append-only, so concurrent writers from multiple nodes would interleave messages and corrupt the conversation. Syncthing detects this and creates conflict files, but prevention is better than cure.
+Sessions must only be active on ONE node at a time. The JSONL format is append-only, so concurrent writers from multiple nodes would interleave messages and corrupt the conversation. Syncthing detects this and creates conflict files, but prevention is better than cure: `cr` now enforces the rule with a cross-node session lock (`lib/session-lock.sh`) instead of relying on discipline alone.
 
 ### CWD-Based Namespacing
 Claude Code maps working directory → session directory name. This is a Claude Code convention, not ours. We leverage it for isolation: personal sessions live under `~/Desktop`, project work under `~/Projects/<name>`. Federation agents should never start sessions from `~/Desktop`.

@@ -274,6 +274,65 @@ fi
 
 echo ""
 
+# ─── 10. Session locks ────────────────────────────────────────
+printf '%s%s%s\n' "$BOLD" "Session Locks" "$NC"
+
+LOCK_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+locks_lib_found=false
+if [[ -f "$LOCK_SCRIPT_DIR/lib/session-lock.sh" ]]; then
+    # shellcheck source=lib/session-lock.sh
+    source "$LOCK_SCRIPT_DIR/lib/session-lock.sh"
+    locks_lib_found=true
+elif [[ -f "$HOME/.local/lib/session-roam/session-lock.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$HOME/.local/lib/session-roam/session-lock.sh"
+    locks_lib_found=true
+fi
+
+if [[ "$locks_lib_found" == false ]]; then
+    warn "session-lock library not found (run install-aliases.sh)"
+else
+    shopt -s nullglob
+    roam_lock_files=("$session_dir"/*/"$ROAM_LOCK_NAME")
+    if [[ ${#roam_lock_files[@]} -eq 0 ]]; then
+        info "No session locks present"
+    else
+        for lf in "${roam_lock_files[@]}"; do
+            lock_classify "$(dirname "$lf")"
+            ns_name="$(basename "$(dirname "$lf")")"
+            case "$LOCK_CLASS" in
+                self-active)
+                    v_holder="pid ${LOCK_PID:-?}"
+                    if [[ -n "${LOCK_TTY:-}" && "$LOCK_TTY" != "none" ]]; then v_holder+=", tty $LOCK_TTY"; fi
+                    ok "active HERE: $ns_name ($v_holder, since ${LOCK_STARTED:-?})"
+                    ;;
+                self-stale)
+                    warn "stale LOCAL lock: $ns_name (pid ${LOCK_PID:-?} no longer running) -- safe to delete: $lf"
+                    ;;
+                remote-fresh)
+                    warn "likely ACTIVE on '${LOCK_NODE}': $ns_name (held ${LOCK_AGE}s, since ${LOCK_STARTED:-?})"
+                    ;;
+                remote-stale)
+                    info "aged lock from '${LOCK_NODE}': $ns_name (held ${LOCK_AGE}s) -- probably a crashed holder, resume will offer override"
+                    ;;
+                unknown)
+                    warn "UNREADABLE lock file: $lf"
+                    ;;
+            esac
+        done
+    fi
+
+    while IFS= read -r roam_tmp; do
+        roam_tmp_age=$(( $(date +%s) - $(stat -c %Y "$roam_tmp" 2>/dev/null || echo 0) ))
+        if [[ $roam_tmp_age -gt 3600 ]]; then
+            warn "abandoned lock temp file (crash mid-write?): $roam_tmp"
+        fi
+    done < <(find "$session_dir" -name "*${ROAM_LOCK_TMP_SUFFIX}" 2>/dev/null)
+    shopt -u nullglob
+fi
+
+echo ""
+
 # ─── Summary ──────────────────────────────────────────────────
 echo "────────────────────────────────────"
 if [[ $ERRORS -eq 0 && $WARNINGS -eq 0 ]]; then

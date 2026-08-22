@@ -87,7 +87,8 @@ t_sandbox
 run_installer
 assert_exec "$HOME/.local/bin/cr"
 cmp -s "$REPO_ROOT/cr.sh" "$HOME/.local/bin/cr"; assert_eq "$?" 0 "deployed copy matches source"
-assert_no_file "$HOME/.local/lib/session-roam/session-lock.sh"
+assert_file "$HOME/.local/lib/session-roam/session-lock.sh"
+cmp -s "$REPO_ROOT/lib/session-lock.sh" "$HOME/.local/lib/session-roam/session-lock.sh"; assert_eq "$?" 0 "lock lib deployed matches source"
 t_end
 
 t_start "removes a pre-existing plain 'alias cr=' line"

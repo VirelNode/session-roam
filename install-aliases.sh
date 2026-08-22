@@ -78,6 +78,18 @@ else
     warn "cr.sh not found in script directory (skipping)"
 fi
 
+# ─── Deploy session-lock library (used by cr + verify) ────────
+LOCK_SRC="${SCRIPT_DIR}/lib/session-lock.sh"
+LOCK_DST="$HOME/.local/lib/session-roam/session-lock.sh"
+
+if [[ -f "$LOCK_SRC" ]]; then
+    mkdir -p "$(dirname "$LOCK_DST")"
+    cp "$LOCK_SRC" "$LOCK_DST"
+    ok "Deployed session-lock library to ~/.local/lib/session-roam/"
+else
+    warn "lib/session-lock.sh not found in script directory (skipping)"
+fi
+
 # ─── Install aliases ──────────────────────────────────────────
 echo ""
 printf '%s%s%s\n' "$BOLD" "Installing Claude Code session shortcuts..." "$NC"

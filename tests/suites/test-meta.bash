@@ -28,9 +28,13 @@ tmpl="$(cat "$REPO_ROOT/stignore.template")"
 assert_contains "$tmpl" "**/subagents" "subagents excluded"
 assert_contains "$tmpl" "*worktrees*" "worktrees excluded"
 assert_contains "$tmpl" "**/node_modules" "node_modules excluded"
+assert_contains "$tmpl" "*.roam-lock.tmp" "lock temp flicker excluded from sync"
 active_rules="$(grep -vE '^[[:space:]]*//' "$REPO_ROOT/stignore.template" | grep -v '^[[:space:]]*$')"
 if printf '%s' "$active_rules" | grep -Eq 'jsonl|memory|MEMORY'; then
     fail_msg "an active rule excludes sessions or memory"
+fi
+if printf '%s' "$active_rules" | grep -qF '.roam-lock.json'; then
+    fail_msg "the live lock file itself must stay synced"
 fi
 if grep -E '^\s*//\s*\*\*\.sync-conflict' "$REPO_ROOT/stignore.template" >/dev/null; then :; else
     fail_msg "conflict-ignore rule should stay commented out"

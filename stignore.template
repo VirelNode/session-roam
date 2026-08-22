@@ -9,6 +9,9 @@
 // Do NOT add .stfolder here — Syncthing needs it as a folder marker.
 .stversions
 
+// ─── session-roam lock temp (atomic-write flicker, never sync) ─
+*.roam-lock.tmp
+
 // ─── Agent worktrees (GSD subagents, bulk of wasted sync) ─────
 *worktrees*
 
