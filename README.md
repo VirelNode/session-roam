@@ -154,4 +154,4 @@ The suite sandboxes `$HOME` and `$PWD` per test and puts recorder stubs first on
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
