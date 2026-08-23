@@ -16,7 +16,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run test suite (default bash)
         run: bash tests/run.sh
       - name: Run test suite (system /bin/bash — macOS 3.2 portability)
