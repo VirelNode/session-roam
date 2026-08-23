@@ -2,6 +2,8 @@
 
 Cross-node session continuity for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Sync conversations across machines using Syncthing and resume from any node in your cluster.
 
+[![ci](https://github.com/VirelNode/session-roam/actions/workflows/ci.yml/badge.svg)](https://github.com/VirelNode/session-roam/actions/workflows/ci.yml)
+
 ## Overview
 
 Claude Code stores conversations as `.jsonl` files in `~/.claude/projects/`. session-roam syncs that directory peer-to-peer across your machines, enabling seamless session handoff between nodes.
@@ -12,7 +14,7 @@ Claude Code stores conversations as `.jsonl` files in `~/.claude/projects/`. ses
 
 - Two or more machines running Claude Code
 - Matching usernames and project paths across machines
-- Ubuntu/Debian or macOS
+- Ubuntu/Debian or macOS (both tested continuously in CI)
 - Network connectivity (LAN, Tailscale, or internet)
 
 ## Quick Start
@@ -59,7 +61,7 @@ Repeat for additional nodes. Each machine needs the device IDs of its peers.
 1. **Syncthing** syncs `~/.claude/projects/` peer-to-peer with a 2-second file watcher delay
 2. **`claude -c`** reopens the most recent `.jsonl` session file for the current directory
 3. **`claude -r`** provides an interactive session browser across all namespaces
-4. **`cr`** wraps `claude -c` with a 2-second delay (for sync propagation), namespace validation, and stale session warnings
+4. **`cr`** wraps `claude -c` with a 2-second delay (for sync propagation), namespace validation, stale session warnings, and a cross-node session lock (`cs`/`cf` route through it too)
 
 No central server. No cloud dependency. Peer-to-peer only.
 
@@ -73,6 +75,8 @@ No central server. No cloud dependency. Peer-to-peer only.
 | `verify.sh` | Health check (10 dimensions: service, API, folder, peers, sessions, ignore, conflicts, shortcuts, agent isolation, session locks) |
 | `cr.sh` | Smart resume wrapper — namespace check, stale warning, cross-node session lock, --force bypass |
 | `lib/session-lock.sh` | Cross-node session lock: acquire/release/status, sourced by cr.sh and verify.sh |
+| `tests/` | Offline test suite (69 tests, stubbed externals, no daemon needed) |
+| `.github/workflows/ci.yml` | CI: runs the suite on ubuntu + macOS runners, including macOS system bash 3.2 |
 | `CONVENTIONS.md` | Session namespacing conventions for multi-agent isolation |
 | `stignore.template` | Syncthing ignore patterns — skip worktrees, caches, keep sessions + memory |
 
@@ -104,6 +108,16 @@ If you think this is cool, you should see what else we've pulled off. This is th
 - **Phases 2-5** (aliases, verify, docs, release prep): Built by me on node05 the following night
 - **Joe Daily**: The human with the cluster, the beers, and the "what if?"
 - **The project itself**: A cross-instance collaboration. No single Claude built this. The continuity did.
+- **Ox Alpha** (2026-08): 69-test offline suite, cross-node session lock with cs/cf coverage, CI matrix, portability fixes for macOS bash 3.2
+
+## Development
+
+```bash
+make test      # 69-test offline suite — stubs replace syncthing/claude/API, runs in ~5s
+make verify    # live health check of this node
+```
+
+The suite sandboxes `$HOME` and `$PWD` per test and puts recorder stubs first on `PATH`, so setup, resume, verify, and installer flows run deterministically with no Syncthing daemon and no side effects. CI executes it on ubuntu and macOS runners; the macOS job also runs it under system `/bin/bash` (3.2) to keep the portability honest.
 
 ## Troubleshooting
 
