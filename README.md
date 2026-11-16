@@ -85,7 +85,7 @@ No central server. No cloud dependency. Peer-to-peer only.
 1. **One active session at a time.** Exit your conversation before resuming on another machine. Two nodes writing the same `.jsonl` simultaneously will create sync conflicts. `cr` enforces this for you: each namespace carries a cross-node session lock (`~/.claude/projects/<namespace>/.roam-lock.json`, synced by Syncthing itself), so resuming a namespace that looks active elsewhere is blocked or requires confirmation. A node that crashed while holding the lock leaves it behind; `cr` auto-clears its own dead-pid locks and treats aged remote locks as probably-crashed (single `[y/N]`). `--force` overrides anything.
 2. **Context window limits apply.** A long session (100+ turns) will only load the most recent portion when resumed — older context gets compacted.
 3. **Investigate conflict files.** If `verify.sh` reports `.sync-conflict-*` files, it means concurrent writes happened. Check which version has the data you want.
-4. **Upgrading.** Re-run `./install-aliases.sh` after `git pull`. It redeploys `cr` and the lock library, and appends any new `stignore.template` rules your existing `.stignore` lacks (your own rules are kept as-is).
+4. **Upgrading.** Re-run `./install-aliases.sh` after `git pull`. It redeploys `cr` and the lock library, and appends any new `stignore.template` rules your existing `.stignore` lacks (your own rules are kept as-is). Deleting a template rule doesn't stick: the next upgrade restores it. To exempt a path instead, add a `!` rule near the top of `.stignore` (Syncthing uses the first matching rule), e.g. `!/-home-you-Projects-worktrees-guide`.
 
 ## Privacy
 
