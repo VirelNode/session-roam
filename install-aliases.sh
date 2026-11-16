@@ -23,12 +23,90 @@ ALIASES_BLOCK='
 # cn  = start a named session
 # cfork = fork a past session (resume without overwriting)
 # crf = branch off your last conversation
+# unalias: drop any earlier alias of these names so the definitions below
+# win and `cf()` etc. parse even if a user or older block aliased them.
+unalias cr cs cf cn cfork crf 2>/dev/null
 alias cs='"'"'cr --browse'"'"'
 cf() { cr --search "$*"; }
 cn() { claude -n "$*"; }
 cfork() { claude --resume "$1" --fork-session; }
 alias crf='"'"'sleep 2 && claude -c --fork-session'"'"'
 '
+
+# Every alias block earlier versions of this installer wrote, byte for byte
+# (from git history: ce8146c 2026-04-11, 3559899 2026-04-11..2026-08-22,
+# d96252a 2026-08-22..2026-11-16). On upgrade only exact copies of these, or
+# of the current block, are removed. Anything else in the file, including a
+# block the user edited, is never touched; the current block appended at the
+# end overrides it. Blocks are separated by a line containing only "@@".
+known_old_blocks() {
+    cat <<'KNOWN'
+# session-roam aliases — https://github.com/VirelNode/session-roam
+# cr  = continue recent (2s Syncthing delay)
+# cs  = browse all sessions
+# cf  = find/search sessions by keyword
+# cn  = start a named session
+# cfork = fork a past session (resume without overwriting)
+# crf = branch off your last conversation
+alias cr='sleep 2 && claude -c'
+alias cs='claude -r'
+cf() { claude -r "$*"; }
+cn() { claude -n "$*"; }
+cfork() { claude --resume "$1" --fork-session; }
+alias crf='sleep 2 && claude -c --fork-session'
+@@
+# session-roam aliases — https://github.com/VirelNode/session-roam
+# cr  = continue recent (smart wrapper in ~/.local/bin/cr)
+# cs  = browse all sessions
+# cf  = find/search sessions by keyword
+# cn  = start a named session
+# cfork = fork a past session (resume without overwriting)
+# crf = branch off your last conversation
+alias cs='claude -r'
+cf() { claude -r "$*"; }
+cn() { claude -n "$*"; }
+cfork() { claude --resume "$1" --fork-session; }
+alias crf='sleep 2 && claude -c --fork-session'
+@@
+# session-roam aliases — https://github.com/VirelNode/session-roam
+# cr  = continue recent (smart wrapper in ~/.local/bin/cr)
+# cs  = browse all sessions
+# cf  = find/search sessions by keyword
+# cn  = start a named session
+# cfork = fork a past session (resume without overwriting)
+# crf = branch off your last conversation
+alias cs='cr --browse'
+cf() { cr --search "$*"; }
+cn() { claude -n "$*"; }
+cfork() { claude --resume "$1" --fork-session; }
+alias crf='sleep 2 && claude -c --fork-session'
+@@
+KNOWN
+}
+
+# Exact-block scanner. First input: blocks separated by "@@" lines (block 1 is
+# the current one). Second input: the rc file. Trailing \r is ignored when
+# comparing. mode=count prints "<current> <old>" occurrence counts;
+# mode=strip prints the rc file without those blocks (and one blank line
+# after each), every other line unchanged.
+BLOCK_SCAN_AWK='
+    BEGIN { nb = 1 }
+    FNR == NR { if ($0 == "@@") { nb++; next } k[nb, ++kl[nb]] = $0; next }
+    { l = $0; sub(/\r$/, "", l); n++; L[n] = l; R[n] = $0 }
+    END {
+        i = 1
+        while (i <= n) {
+            hit = 0
+            for (b = 1; b <= nb; b++) {
+                m = kl[b]; if (m == 0) continue
+                ok = 1
+                for (j = 1; j <= m; j++) if (i + j - 1 > n || L[i + j - 1] != k[b, j]) { ok = 0; break }
+                if (ok) { cnt[b]++; i += m; if (i <= n && L[i] == "") i++; hit = 1; break }
+            }
+            if (!hit) { if (mode == "strip") print R[i]; i++ }
+        }
+        if (mode == "count") { old = 0; for (b = 2; b <= nb; b++) old += cnt[b]; print cnt[1] + 0, old }
+    }'
 
 install_to_file() {
     local target="$1"
@@ -39,52 +117,40 @@ install_to_file() {
         touch "$target"
     fi
 
-    if grep -qF "$MARKER" "$target" 2>/dev/null; then
-        # A block starts at a marker line ("# session-roam aliases" alone or
-        # followed by " — ", as every version wrote it) and runs over the lines
-        # session-roam itself writes: "# <name>  =" comments, alias lines and
-        # ONE-LINE function definitions for its own six names. The first
-        # unrecognised line ends it and is always kept, so user lines (including
-        # a hand-edited multi-line function) are never deleted or split; the
-        # current block appended later overrides them. Every block in the file
-        # is handled, so a stale duplicate can't hide behind a current one.
-        # Trailing \r is ignored (CRLF files).
-        # mode=block prints every block (minus the blank); mode=strip prints the rest.
-        local block_awk='
-            { l = $0; sub(/\r$/, "", l) }
-            l == m || index(l, m " — ") == 1 { inb = 1; if (mode == "block") print l; next }
-            inb {
-                if (l ~ /^# (cr|cs|cf|cn|cfork|crf) +=/ || l ~ /^alias (cr|cs|cf|cn|cfork|crf)=/ || l ~ /^(cs|cf|cn|cfork|crf)\(\) *\{.*\} *$/) {
-                    if (mode == "block") print l; next
-                }
-                inb = 0
-                if (l == "") next
-            }
-            mode == "strip" { print }'
-        local existing current tmp_file backup
-        existing="$(awk -v m="$MARKER" -v mode=block "$block_awk" "$target")"
-        current="$(printf '%s\n' "$ALIASES_BLOCK" | awk -v m="$MARKER" -v mode=block "$block_awk")"
-        if [[ "$existing" == "$current" ]]; then
-            ok "$name already has session-roam aliases (skipping)"
-            return 0
-        fi
-        # Outdated, duplicated or missing block (e.g. April 2026 cs/cf calling
-        # claude directly, bypassing cr's lock): back up, drop blocks, append the
-        # current one. An earlier backup is never overwritten.
-        backup="${target}.session-roam.bak"
-        [[ -e "$backup" ]] && backup="${backup}.$(date +%Y%m%d%H%M%S).$$"
-        cp "$target" "$backup"
-        tmp_file="${target}.roam-tmp.$$"
-        awk -v m="$MARKER" -v mode=strip "$block_awk" "$target" > "$tmp_file"
-        printf '%s\n' "$ALIASES_BLOCK" >> "$tmp_file"
-        cat "$tmp_file" > "$target"
-        rm -f "$tmp_file"
-        ok "Updated outdated session-roam aliases in $name (backup: $backup)"
+    local known tmp_file counts n_cur n_old backup
+    known="${target}.roam-known.$$"
+    # Current block first (leading blank line dropped), then every old one.
+    { printf '%s\n' "$ALIASES_BLOCK" | sed '1{/^$/d;}'; printf '@@\n'; known_old_blocks; } > "$known"
+    counts="$(awk -v mode=count "$BLOCK_SCAN_AWK" "$known" "$target")"
+    n_cur="${counts%% *}"; n_old="${counts##* }"
+
+    if [[ "$n_cur" == 1 && "$n_old" == 0 ]]; then
+        rm -f "$known"
+        ok "$name already has session-roam aliases (skipping)"
         return 0
     fi
 
-    printf '\n%s\n' "$ALIASES_BLOCK" >> "$target"
-    ok "Installed aliases to $name"
+    if [[ "$n_cur" == 0 && "$n_old" == 0 ]]; then
+        rm -f "$known"
+        if grep -qF "$MARKER" "$target" 2>/dev/null; then
+            warn "$name has a session-roam block this installer did not write (edited?); leaving it untouched"
+        fi
+        printf '\n%s\n' "$ALIASES_BLOCK" >> "$target"
+        ok "Installed aliases to $name"
+        return 0
+    fi
+
+    # Old block(s) and/or duplicate current blocks: back up (never overwriting
+    # an earlier backup), remove the exact copies, append one current block.
+    backup="${target}.session-roam.bak"
+    [[ -e "$backup" ]] && backup="${backup}.$(date +%Y%m%d%H%M%S).$$"
+    cp "$target" "$backup"
+    tmp_file="${target}.roam-tmp.$$"
+    awk -v mode=strip "$BLOCK_SCAN_AWK" "$known" "$target" > "$tmp_file"
+    printf '%s\n' "$ALIASES_BLOCK" >> "$tmp_file"
+    cat "$tmp_file" > "$target"
+    rm -f "$tmp_file" "$known"
+    ok "Updated outdated session-roam aliases in $name (backup: $backup)"
 }
 
 # ─── Install .stignore ────────────────────────────────────────

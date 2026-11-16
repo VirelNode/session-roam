@@ -72,86 +72,118 @@ assert_contains "$(cat "$HOME/.claude/projects/.stignore")" "MY CUSTOM IGNORES" 
 assert_contains "$OUT$ERR" "not overwriting" "warns about skipping"
 t_end
 
-t_start "outdated session-roam alias block is replaced; surrounding lines and a backup kept"
-t_sandbox
-# The April 2026 block: same marker, but cs/cf call claude directly and bypass cr's lock.
-cat > "$HOME/.bash_aliases" <<'OLD'
-# my stuff before
-alias ll='ls -l'
-
+# The block every install between 2026-04-11 and 2026-08-22 wrote (3559899):
+# cs/cf call claude directly and bypass cr's lock.
+april_block() {
+    cat <<'APRIL'
 # session-roam aliases — https://github.com/VirelNode/session-roam
+# cr  = continue recent (smart wrapper in ~/.local/bin/cr)
 # cs  = browse all sessions
+# cf  = find/search sessions by keyword
+# cn  = start a named session
+# cfork = fork a past session (resume without overwriting)
+# crf = branch off your last conversation
 alias cs='claude -r'
 cf() { claude -r "$*"; }
+cn() { claude -n "$*"; }
+cfork() { claude --resume "$1" --fork-session; }
 alias crf='sleep 2 && claude -c --fork-session'
+APRIL
+}
 
-# my stuff after
-alias gs='git status'
-OLD
+# Source an rc file the way an interactive bash would (aliases expanded) and
+# report what cs and cf resolve to. Sets SRC_RC, CS_DEF, CF_DEF.
+resolve_shortcuts() {
+    local out
+    out="$("$BASH" -c 'shopt -s expand_aliases; . "$1"; echo "rc=$?"; alias cs 2>&1; declare -f cf 2>&1' _ "$1" 2>&1)"
+    SRC_RC="$(printf '%s\n' "$out" | sed -n 's/^rc=//p')"
+    CS_DEF="$(printf '%s\n' "$out" | grep "^alias cs=")"
+    CF_DEF="$(printf '%s\n' "$out" | grep -A3 '^cf ()' | tr -s ' \n' ' ')"
+}
+
+assert_routes_through_cr() { # assert_routes_through_cr <rc-file> <label>
+    resolve_shortcuts "$1"
+    assert_eq "$SRC_RC" 0 "$2: file sources cleanly with aliases on"
+    assert_contains "$CS_DEF" "cr --browse" "$2: cs goes through cr"
+    assert_contains "$CF_DEF" "cr --search" "$2: cf goes through cr"
+}
+
+t_start "exact April block is replaced; surrounding lines kept; backup; second run no-op"
+t_sandbox
+{ printf '# my stuff before\nalias ll='"'"'ls -l'"'"'\n\n'; april_block; printf '\n# my stuff after\nalias gs='"'"'git status'"'"'\n'; } > "$HOME/.bash_aliases"
 run_installer
 assert_eq "$RC" 0 "installer exits 0"
 al="$(cat "$HOME/.bash_aliases")"
-assert_contains "$al" "alias cs='cr --browse'" "cs now routes through cr"
-assert_contains "$al" 'cf() { cr --search' "cf now routes through cr"
-assert_eq "$(grep -c "alias cs='claude -r'" "$HOME/.bash_aliases")" 0 "old cs alias gone"
+assert_eq "$(grep -c 'claude -r' "$HOME/.bash_aliases")" 0 "April cs/cf lines gone"
 assert_eq "$(grep -cF '# session-roam aliases' "$HOME/.bash_aliases")" 1 "exactly one block"
 assert_contains "$al" "alias ll='ls -l'" "line before block kept"
 assert_contains "$al" "alias gs='git status'" "line after block kept"
-assert_file "$HOME/.bash_aliases.session-roam.bak" "backup of the pre-upgrade file written"
+assert_file "$HOME/.bash_aliases.session-roam.bak" "backup written"
 assert_contains "$OUT$ERR" "Updated outdated session-roam aliases" "upgrade reported"
+assert_routes_through_cr "$HOME/.bash_aliases" "April upgrade"
 before="$(cat "$HOME/.bash_aliases")"
 run_installer
 assert_eq "$(cat "$HOME/.bash_aliases")" "$before" "second run changes nothing"
 assert_contains "$OUT$ERR" "already has session-roam aliases" "second run reports current block"
 t_end
 
-t_start "outdated block upgrade never deletes user lines (no blank line after block, CRLF file)"
+t_start "exact April block in a CRLF file, and with no blank line after it, never takes user lines"
 t_sandbox
-printf "# session-roam aliases — https://github.com/VirelNode/session-roam\nalias cs='claude -r'\nalias gs='git status'\n" > "$HOME/.bash_aliases"
+{ april_block; printf 'alias gs='"'"'git status'"'"'\n'; } > "$HOME/.bash_aliases"
 run_installer
 assert_contains "$(cat "$HOME/.bash_aliases")" "alias gs='git status'" "user line right after block kept"
-assert_eq "$(grep -c "alias cs='claude -r'" "$HOME/.bash_aliases")" 0 "old cs alias gone"
+assert_eq "$(grep -c 'claude -r' "$HOME/.bash_aliases")" 0 "April lines gone"
 t_sandbox
-printf "# before\r\n\r\n# session-roam aliases — https://github.com/VirelNode/session-roam\r\n# cs  = browse all sessions\r\nalias cs='claude -r'\r\n\r\n# after\r\nalias gs='git status'\r\n" > "$HOME/.bash_aliases"
+{ printf '# before\n\n'; april_block; printf '\n# after\nalias gs='"'"'git status'"'"'\n'; } | sed 's/$/\r/' > "$HOME/.bash_aliases"
 run_installer
 al="$(cat "$HOME/.bash_aliases")"
 assert_contains "$al" "alias gs='git status'" "CRLF: line after block kept"
 assert_contains "$al" "# before" "CRLF: line before block kept"
-assert_eq "$(grep -c "alias cs='claude -r'" "$HOME/.bash_aliases")" 0 "CRLF: old cs alias gone"
-assert_contains "$al" "alias cs='cr --browse'" "CRLF: current block present"
+assert_eq "$(grep -c 'claude -r' "$HOME/.bash_aliases")" 0 "CRLF: April lines gone"
 t_end
 
-t_start "block upgrade keeps rc valid shell, removes every stale duplicate, ignores look-alike markers"
+t_start "a block the user edited is left byte-for-byte; appended block still wins when sourced"
+# Each case is a valid customization a line-matcher could split (Dex review r2).
+for variant in multiline-alias nested-func alias-then-export user-alias-cf; do
+    t_sandbox
+    case "$variant" in
+        multiline-alias)   printf "# session-roam aliases\nalias cs='\n  claude -r\n'\n" ;;
+        nested-func)       printf '# session-roam aliases\ncf() { inner() { :; }\n  claude -r "$*"\n}\n' ;;
+        alias-then-export) printf "# session-roam aliases\nalias cs='claude -r'; export KEEP_ME=yes\n" ;;
+        user-alias-cf)     printf "# session-roam aliases\nalias cs='claude -r'\n# user adjustment\nalias cf='claude -r'\n" ;;
+    esac > "$HOME/.bash_aliases"
+    orig="$(cat "$HOME/.bash_aliases")"
+    run_installer
+    assert_eq "$RC" 0 "$variant: installer exits 0"
+    now="$(cat "$HOME/.bash_aliases")"
+    assert_eq "${now:0:${#orig}}" "$orig" "$variant: original content untouched"
+    assert_contains "$OUT$ERR" "did not write" "$variant: user told their block was left alone"
+    assert_routes_through_cr "$HOME/.bash_aliases" "$variant"
+done
+t_end
+
+t_start "current block plus a stale duplicate: stale removed, one block left, backups never overwritten"
 t_sandbox
-# A user-edited multi-line cf with a blank line inside: must not be split.
-printf '# session-roam aliases — https://github.com/VirelNode/session-roam\nalias cs='"'"'claude -r'"'"'\ncf() {\n  claude -r "$*"\n\n}\n' > "$HOME/.bash_aliases"
 run_installer
-"$BASH" -n "$HOME/.bash_aliases"; assert_eq "$?" 0 "rc file still parses after upgrade"
-assert_contains "$(cat "$HOME/.bash_aliases")" "cf() { cr --search" "current cf appended (later definition wins)"
-# A current block followed by a stale April block.
-t_sandbox
+april_block >> "$HOME/.bash_aliases"
 run_installer
-printf '\n# session-roam aliases — https://github.com/VirelNode/session-roam\ncf() { claude -r "$*"; }\n' >> "$HOME/.bash_aliases"
-run_installer
-assert_eq "$(grep -c 'claude -r' "$HOME/.bash_aliases")" 0 "stale duplicate block removed"
+assert_eq "$(grep -c 'claude -r' "$HOME/.bash_aliases")" 0 "stale duplicate removed"
 assert_eq "$(grep -cF '# session-roam aliases' "$HOME/.bash_aliases")" 1 "exactly one block left"
-# A user comment that merely starts with the marker text is not a block.
+first="$(cat "$HOME/.bash_aliases.session-roam.bak")"
+april_block >> "$HOME/.bash_aliases"
+run_installer
+assert_eq "$(cat "$HOME/.bash_aliases.session-roam.bak")" "$first" "first backup preserved"
+assert_eq "$(ls "$HOME"/.bash_aliases.session-roam.bak* | wc -l | tr -d ' ')" 2 "second backup written alongside"
+assert_routes_through_cr "$HOME/.bash_aliases" "after duplicate cleanup"
+t_end
+
+t_start "a look-alike comment is not a block"
 t_sandbox
 printf '# session-roam aliases customization\nexport KEEP=1\n' > "$HOME/.bash_aliases"
 run_installer
-assert_contains "$(cat "$HOME/.bash_aliases")" "# session-roam aliases customization" "look-alike comment kept"
-assert_contains "$(cat "$HOME/.bash_aliases")" "export KEEP=1" "line after look-alike kept"
-t_end
-
-t_start "a second upgrade does not overwrite the first backup"
-t_sandbox
-printf '# session-roam aliases — https://github.com/VirelNode/session-roam\nalias cs='"'"'claude -r'"'"'\n' > "$HOME/.bash_aliases"
-run_installer
-first="$(cat "$HOME/.bash_aliases.session-roam.bak")"
-printf '\n# session-roam aliases — https://github.com/VirelNode/session-roam\nalias cs='"'"'claude -r'"'"'\n' >> "$HOME/.bash_aliases"
-run_installer
-assert_eq "$(cat "$HOME/.bash_aliases.session-roam.bak")" "$first" "original backup preserved"
-assert_eq "$(ls "$HOME"/.bash_aliases.session-roam.bak* | wc -l | tr -d ' ')" 2 "second backup written alongside"
+al="$(cat "$HOME/.bash_aliases")"
+assert_contains "$al" "# session-roam aliases customization" "look-alike comment kept"
+assert_contains "$al" "export KEEP=1" "line after look-alike kept"
 t_end
 
 t_start "existing .stignore gains rules added to the template since it was installed"
