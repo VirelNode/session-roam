@@ -6,6 +6,10 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER_DIR="$REPO_ROOT/tests"
 
+# Every suite, and every script a suite launches, runs under this interpreter
+# (not PATH bash), so `/bin/bash tests/run.sh` really tests bash 3.2 on macOS.
+printf 'bash under test: %s (%s)\n' "$BASH" "$BASH_VERSION"
+
 total_pass=0 total_fail=0 total_skip=0
 failed_suites=()
 
@@ -13,7 +17,7 @@ for suite in "$RUNNER_DIR"/suites/test-*.bash; do
     [[ -e "$suite" ]] || { echo "no suites found" >&2; exit 1; }
     name="$(basename "$suite")"
     printf '\n=== %s ===\n' "$name"
-    out="$(bash "$suite" 2>&1)"
+    out="$("$BASH" "$suite" 2>&1)"
     rc=$?
     printf '%s\n' "$out"
     tally="$(printf '%s\n' "$out" | grep -oE 'SUITE_TALLY pass=[0-9]+ fail=[0-9]+ skip=[0-9]+' | tail -1)"

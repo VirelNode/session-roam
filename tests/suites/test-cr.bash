@@ -164,7 +164,7 @@ seed_session "$(ns_for "$CWD")" $((now - 120))
     cd "$CWD"
     export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=8
     export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
-    exec bash "$CR" --search "fix login bug"
+    exec "$BASH" "$CR" --search "fix login bug"
 ) >"$SBX/out.txt" 2>&1 </dev/null &
 wrapper=$!
 wait_for_file "$SBX/claude.log" 10; assert_eq "$?" 0 "search resumed"

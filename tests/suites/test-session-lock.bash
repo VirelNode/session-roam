@@ -24,7 +24,7 @@ EOF
 
 lib_classify() { # lib_classify <dir> [fresh_secs] -> prints LOCK_CLASS
     local dir="$1" fresh="${2:-}"
-    REPO_ROOT_X="$REPO_ROOT" FRESH_X="$fresh" bash -c '
+    REPO_ROOT_X="$REPO_ROOT" FRESH_X="$fresh" "$BASH" -c '
         [[ -n "$FRESH_X" ]] && export ROAM_FRESH_SECS="$FRESH_X"
         source "$REPO_ROOT_X/lib/session-lock.sh"
         lock_classify "$1"
@@ -72,7 +72,7 @@ assert_eq "$(lib_classify "$(ns_for "$CWD")")" "none" "no lock -> none"
 write_lock "$(hostname)" "$live_pid" 30
 assert_eq "$(lib_classify "$(ns_for "$CWD")")" "self-active" "own node live pid -> self-active"
 lib_tty() {
-    bash -c '
+    "$BASH" -c '
         source "'"$LIB"'"
         lock_classify "$1"
         printf "%s" "${LOCK_TTY:-<unset>}"
@@ -108,7 +108,7 @@ setup_env
     cd "$CWD"
     export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=8
     export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
-    exec bash "$CR"
+    exec "$BASH" "$CR"
 ) >"$SBX/out.txt" 2>&1 </dev/null &
 wrapper=$!
 wait_for_file "$SBX/claude.log" 10; assert_eq "$?" 0 "claude started"
@@ -142,7 +142,7 @@ write_lock "${PEER_PREFIX}-a" 424242 45
     cd "$CWD"
     export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=8
     export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
-    exec bash "$CR" --force
+    exec "$BASH" "$CR" --force
 ) >"$SBX/out.txt" 2>&1 </dev/null &
 wrapper=$!
 wait_for_file "$SBX/claude.log" 10; assert_eq "$?" 0 "claude launched under force"
@@ -178,7 +178,7 @@ printf 'y\n' > "$SBX/stdin.txt"
     cd "$CWD"
     export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=8
     export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
-    exec bash "$CR" < "$SBX/stdin.txt"
+    exec "$BASH" "$CR" < "$SBX/stdin.txt"
 ) >"$SBX/out.txt" 2>&1 &
 wrapper=$!
 wait_for_file "$SBX/claude.log" 10; assert_eq "$?" 0 "claude resumed after accept"
@@ -242,7 +242,7 @@ signal_case() { # signal_case <sig> <expected_rc>
         export CLAUDE_STUB_INT_RC=0
         export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
         export CLAUDE_STUB_READY="$SBX/stub.ready"
-        exec perl -e '$SIG{INT} = $SIG{QUIT} = "DEFAULT"; exec @ARGV or die "exec: $!"' bash "$CR"
+        exec perl -e '$SIG{INT} = $SIG{QUIT} = "DEFAULT"; exec @ARGV or die "exec: $!"' "$BASH" "$CR"
     ) >"$SBX/out.txt" 2>&1 </dev/null &
     wrapper=$!
     wait_for_file "$(lockpath)" 10 || { fail_msg "lock never appeared before $sig"; kill -9 "$wrapper" 2>/dev/null; return 1; }

@@ -5,14 +5,24 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../helpers.bash"
 REPO_ROOT="$REPO_ROOT"
 
-t_start "every shell script passes bash -n"
+t_start "every shell script passes the syntax check (-n) of the bash under test"
 rc_total=0
 errfile="$(mktemp)"
 for f in setup.sh cr.sh verify.sh install-aliases.sh tests/run.sh tests/helpers.bash tests/suites/*.bash; do
-    bash -n "$REPO_ROOT/$f" 2>"$errfile" || { fail_msg "syntax error in $f: $(cat "$errfile")"; rc_total=1; }
+    "$BASH" -n "$REPO_ROOT/$f" 2>"$errfile" || { fail_msg "syntax error in $f: $(cat "$errfile")"; rc_total=1; }
 done
 rm -f "$errfile"
 [[ $rc_total -eq 0 ]] || T_FAILED_NOW=$((T_FAILED_NOW + 1))
+t_end
+
+t_start "scripts under test run with the invoking bash, not PATH bash"
+t_sandbox
+printf 'printf "%%s" "$BASH_VERSION"\n' > "$SBX/ver.sh"
+t_run_in "$SBX" - "$SBX/ver.sh"
+assert_eq "$OUT" "$BASH_VERSION" "t_run_in child reports the suite's bash version"
+# Any bare `bash <script>` / `bash -c` / `bash -n` launch in the harness would bypass this.
+hits="$(grep -nE '(^|[^a-zA-Z/"$_.-])bash +("|-c|-n|\$)' "$REPO_ROOT"/tests/run.sh "$REPO_ROOT"/tests/helpers.bash "$REPO_ROOT"/tests/suites/*.bash | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -v 'grep -nE')"
+[[ -z "$hits" ]] || fail_msg "PATH-bash launches found: $hits"
 t_end
 
 t_start "no CRLF line endings in tracked scripts or templates"

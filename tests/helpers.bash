@@ -79,7 +79,7 @@ t_run_in() {
     if [[ "$stdin_file" == "-" ]]; then
         stdin_file="/dev/null"
     fi
-    ( cd "$wd" && bash "$@" ) >"$SBX/out.txt" 2>"$SBX/err.txt" <"$stdin_file"
+    ( cd "$wd" && "$BASH" "$@" ) >"$SBX/out.txt" 2>"$SBX/err.txt" <"$stdin_file"
     RC=$?
     OUT="$(<"$SBX/out.txt")"
     ERR="$(<"$SBX/err.txt")"
