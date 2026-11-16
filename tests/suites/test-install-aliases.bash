@@ -106,6 +106,9 @@ assert_routes_through_cr() { # assert_routes_through_cr <rc-file> <label>
     assert_eq "$SRC_RC" 0 "$2: file sources cleanly with aliases on"
     assert_contains "$CS_DEF" "cr --browse" "$2: cs goes through cr"
     assert_contains "$CF_DEF" "cr --search" "$2: cf goes through cr"
+    # rc files are sometimes sourced under `set -e`; the block must not abort it.
+    "$BASH" -c 'set -e; shopt -s expand_aliases; . "$1"; echo reached-end' _ "$1" 2>/dev/null | grep -q reached-end
+    assert_eq "$?" 0 "$2: sources to the end under set -e"
 }
 
 t_start "exact April block is replaced; surrounding lines kept; backup; second run no-op"
@@ -184,6 +187,45 @@ run_installer
 al="$(cat "$HOME/.bash_aliases")"
 assert_contains "$al" "# session-roam aliases customization" "look-alike comment kept"
 assert_contains "$al" "export KEEP=1" "line after look-alike kept"
+t_end
+
+t_start "Dex r3 cases: stale lines after a current block, a block nested in a function, legacy cr with trailing commands"
+# A current block followed by lines that bypass cr: re-install must make cr win.
+t_sandbox
+run_installer
+printf "alias cs='claude -r'\ncf() { claude -r \"\$*\"; }\n" >> "$HOME/.bash_aliases"
+run_installer
+assert_routes_through_cr "$HOME/.bash_aliases" "stale lines after current block"
+assert_contains "$(cat "$HOME/.bash_aliases")" "alias cs='claude -r'" "user's later lines kept (overridden, not deleted)"
+# An exact shipped block inside a function: removing it would leave an empty body.
+t_sandbox
+{ printf 'load_roam() {\n'; april_block; printf '}\nexport KEEP_ME=yes\n'; } > "$HOME/.bash_aliases"
+orig="$(cat "$HOME/.bash_aliases")"
+run_installer
+"$BASH" -n "$HOME/.bash_aliases"; assert_eq "$?" 0 "nested case: rc still parses"
+now="$(cat "$HOME/.bash_aliases")"
+assert_eq "${now:0:${#orig}}" "$orig" "nested case: original left untouched"
+assert_routes_through_cr "$HOME/.bash_aliases" "nested case"
+# Legacy cr alias with more commands on the same line: nothing may be lost.
+t_sandbox
+printf "alias cr='sleep 2 && claude -c'; export KEEP_ME=yes\n" > "$HOME/.bash_aliases"
+run_installer
+assert_contains "$(cat "$HOME/.bash_aliases")" "export KEEP_ME=yes" "legacy cr line with trailing command kept whole"
+"$BASH" -c 'shopt -s expand_aliases; . "$1"; alias cr' _ "$HOME/.bash_aliases" >/dev/null 2>&1
+assert_eq "$?" 1 "no cr alias survives sourcing (block unaliases it)"
+t_end
+
+t_start "busybox awk: install finishes (no hang on unmatched lines)"
+if command -v busybox >/dev/null 2>&1 && busybox awk 'BEGIN{}' 2>/dev/null; then
+    t_sandbox
+    mkdir -p "$SBX/bbawk"; ln -s "$(command -v busybox)" "$SBX/bbawk/awk"
+    printf '# normal user rc\n' > "$HOME/.bash_aliases"
+    ( PATH="$SBX/bbawk:$PATH"; cd "$HOME" && timeout 20 "$BASH" "$INSTALLER" ) >/dev/null 2>&1 </dev/null
+    assert_eq "$?" 0 "installer completes under busybox awk"
+    assert_routes_through_cr "$HOME/.bash_aliases" "busybox awk"
+else
+    t_skip "busybox not installed"
+fi
 t_end
 
 t_start "existing .stignore gains rules added to the template since it was installed"

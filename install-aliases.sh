@@ -25,7 +25,7 @@ ALIASES_BLOCK='
 # crf = branch off your last conversation
 # unalias: drop any earlier alias of these names so the definitions below
 # win and `cf()` etc. parse even if a user or older block aliased them.
-unalias cr cs cf cn cfork crf 2>/dev/null
+unalias cr cs cf cn cfork crf 2>/dev/null || true
 alias cs='"'"'cr --browse'"'"'
 cf() { cr --search "$*"; }
 cn() { claude -n "$*"; }
@@ -88,7 +88,8 @@ KNOWN
 # the current one). Second input: the rc file. Trailing \r is ignored when
 # comparing. mode=count prints "<current> <old>" occurrence counts;
 # mode=strip prints the rc file without those blocks (and one blank line
-# after each), every other line unchanged.
+# after each), every other line unchanged. count also prints how many
+# non-blank lines follow the last current block (it must be last to win).
 BLOCK_SCAN_AWK='
     BEGIN { nb = 1 }
     FNR == NR { if ($0 == "@@") { nb++; next } k[nb, ++kl[nb]] = $0; next }
@@ -98,15 +99,29 @@ BLOCK_SCAN_AWK='
         while (i <= n) {
             hit = 0
             for (b = 1; b <= nb; b++) {
-                m = kl[b]; if (m == 0) continue
+                m = kl[b] + 0; if (m == 0) continue
                 ok = 1
                 for (j = 1; j <= m; j++) if (i + j - 1 > n || L[i + j - 1] != k[b, j]) { ok = 0; break }
-                if (ok) { cnt[b]++; i += m; if (i <= n && L[i] == "") i++; hit = 1; break }
+                if (ok) { cnt[b]++; if (b == 1) after = 0; i += m; if (i <= n && L[i] == "") i++; hit = 1; break }
             }
-            if (!hit) { if (mode == "strip") print R[i]; i++ }
+            if (!hit) { if (mode == "strip") print R[i]; if (L[i] != "") after++; i++ }
         }
-        if (mode == "count") { old = 0; for (b = 2; b <= nb; b++) old += cnt[b]; print cnt[1] + 0, old }
+        if (mode == "count") { old = 0; for (b = 2; b <= nb; b++) old += cnt[b]; print cnt[1] + 0, old, after + 0 }
     }'
+
+# rewrite_keeps_syntax <original> <candidate>: true only if a parser for the
+# file's shell is available and it accepts the candidate (or rejected the
+# original too, so the rewrite cannot be what broke it).
+rewrite_keeps_syntax() {
+    local checker
+    case "$1" in
+        *zshrc) checker="$(command -v zsh 2>/dev/null)" ;;
+        *)      checker="${BASH:-$(command -v bash)}" ;;
+    esac
+    [[ -n "$checker" ]] || return 1
+    "$checker" -n "$2" 2>/dev/null && return 0
+    ! "$checker" -n "$1" 2>/dev/null
+}
 
 install_to_file() {
     local target="$1"
@@ -122,9 +137,10 @@ install_to_file() {
     # Current block first (leading blank line dropped), then every old one.
     { printf '%s\n' "$ALIASES_BLOCK" | sed '1{/^$/d;}'; printf '@@\n'; known_old_blocks; } > "$known"
     counts="$(awk -v mode=count "$BLOCK_SCAN_AWK" "$known" "$target")"
-    n_cur="${counts%% *}"; n_old="${counts##* }"
+    local n_after
+    read -r n_cur n_old n_after <<<"$counts"
 
-    if [[ "$n_cur" == 1 && "$n_old" == 0 ]]; then
+    if [[ "$n_cur" == 1 && "$n_old" == 0 && "$n_after" == 0 ]]; then
         rm -f "$known"
         ok "$name already has session-roam aliases (skipping)"
         return 0
@@ -142,14 +158,24 @@ install_to_file() {
 
     # Old block(s) and/or duplicate current blocks: back up (never overwriting
     # an earlier backup), remove the exact copies, append one current block.
-    backup="${target}.session-roam.bak"
-    [[ -e "$backup" ]] && backup="${backup}.$(date +%Y%m%d%H%M%S).$$"
-    cp "$target" "$backup"
     tmp_file="${target}.roam-tmp.$$"
     awk -v mode=strip "$BLOCK_SCAN_AWK" "$known" "$target" > "$tmp_file"
     printf '%s\n' "$ALIASES_BLOCK" >> "$tmp_file"
+    rm -f "$known"
+    # Removal ignores shell context (a shipped block could sit inside a
+    # function or heredoc). If the rewrite would stop the file parsing, or no
+    # parser is available to check it, remove nothing and only append.
+    if ! rewrite_keeps_syntax "$target" "$tmp_file"; then
+        rm -f "$tmp_file"
+        printf '\n%s\n' "$ALIASES_BLOCK" >> "$target"
+        warn "$name: removing the old block would break its syntax (or could not be checked); appended the current block instead, which overrides it"
+        return 0
+    fi
+    backup="${target}.session-roam.bak"
+    [[ -e "$backup" ]] && backup="${backup}.$(date +%Y%m%d%H%M%S).$$"
+    cp "$target" "$backup"
     cat "$tmp_file" > "$target"
-    rm -f "$tmp_file" "$known"
+    rm -f "$tmp_file"
     ok "Updated outdated session-roam aliases in $name (backup: $backup)"
 }
 
@@ -240,12 +266,14 @@ fi
 for rc_file in "$HOME/.bash_aliases" "$HOME/.bashrc" "$HOME/.zshrc"; do
     if [[ -f "$rc_file" ]] && grep -qF "alias cr=" "$rc_file"; then
         tmp_file="${rc_file}.roam-tmp.$$"
-        awk '!/^alias cr=/ || index($0, "claude") == 0' "$rc_file" > "$tmp_file"
+        # Only the exact legacy line (trailing \r ignored); anything else on or
+        # around it is kept. The current block also runs `unalias cr`.
+        awk '{ l = $0; sub(/\r$/, "", l) } l != "alias cr='"'"'sleep 2 && claude -c'"'"'"' "$rc_file" > "$tmp_file"
         if cmp -s "$tmp_file" "$rc_file"; then
             rm -f "$tmp_file"
             info "Left unrelated alias cr= in $(basename "$rc_file") untouched"
         else
-            mv "$tmp_file" "$rc_file"
+            cat "$tmp_file" > "$rc_file"; rm -f "$tmp_file"
             ok "Removed legacy claude cr alias from $(basename "$rc_file") (now using ~/.local/bin/cr)"
         fi
     fi
