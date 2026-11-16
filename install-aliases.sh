@@ -57,6 +57,18 @@ if [[ -f "$STIGNORE_SRC" ]]; then
     mkdir -p "$(dirname "$STIGNORE_DST")"
     if [[ -f "$STIGNORE_DST" ]]; then
         warn ".stignore already exists at $STIGNORE_DST (not overwriting)"
+        # Upgrade path: append template rules the existing file lacks, so older
+        # installs pick up new patterns. Existing lines are never removed or reordered.
+        missing=""
+        while IFS= read -r rule || [[ -n "$rule" ]]; do
+            case "$rule" in ''|//*) continue ;; esac
+            grep -qxF -- "$rule" "$STIGNORE_DST" || missing="${missing}${rule}"$'\n'
+        done < "$STIGNORE_SRC"
+        if [[ -n "$missing" ]]; then
+            [[ -s "$STIGNORE_DST" && -n "$(tail -c1 "$STIGNORE_DST")" ]] && printf '\n' >> "$STIGNORE_DST"
+            printf '\n// ─── added by session-roam install-aliases.sh ───\n%s' "$missing" >> "$STIGNORE_DST"
+            ok "Appended $(printf '%s' "$missing" | grep -c .) new template rule(s) to .stignore"
+        fi
     else
         cp "$STIGNORE_SRC" "$STIGNORE_DST"
         ok "Installed .stignore to ~/.claude/projects/"
