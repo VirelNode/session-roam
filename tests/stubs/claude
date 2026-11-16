@@ -14,7 +14,7 @@ case "${CLAUDE_STUB_MODE:-exit0}" in
     wait-signal)
         trap 'exit 0' TERM HUP
         # INT is acknowledged in the log so a test can prove the child really saw it.
-        trap 'echo "stub-got-INT" >> "${CLAUDE_STUB_LOG:-/dev/null}"; exit 130' INT
+        trap 'echo "stub-got-INT" >> "${CLAUDE_STUB_LOG:-/dev/null}"; exit "${CLAUDE_STUB_INT_RC:-130}"' INT
         [[ -n ${CLAUDE_STUB_READY:-} ]] && : > "$CLAUDE_STUB_READY"
         local_max="${CLAUDE_STUB_MAX_WAIT:-30}"
         waited=0
