@@ -40,11 +40,26 @@ install_to_file() {
     fi
 
     if grep -qF "$MARKER" "$target" 2>/dev/null; then
-        # The block runs from the marker line to the next blank line.
-        local block_awk='index($0, m) == 1 {f = 1} f && /^$/ {exit} f'
+        # The block is the marker line plus the run of lines session-roam itself
+        # writes right after it: "# cs  = ..." comments and alias/function
+        # definitions for its own six names, optionally ended by one blank line.
+        # The first unrecognised line ends the block and is always kept, so a
+        # user's lines can never be deleted. Trailing \r is ignored (CRLF files).
+        # mode=block prints the block (minus the blank); mode=strip prints the rest.
+        local block_awk='
+            { l = $0; sub(/\r$/, "", l) }
+            !inb && !done && index(l, m) == 1 { inb = 1; if (mode == "block") print l; next }
+            inb {
+                if (l ~ /^# (cr|cs|cf|cn|cfork|crf) +=/ || l ~ /^alias (cr|cs|cf|cn|cfork|crf)=/ || l ~ /^(cs|cf|cn|cfork|crf)\(\) /) {
+                    if (mode == "block") print l; next
+                }
+                inb = 0; done = 1
+                if (l == "") next
+            }
+            mode == "strip" { print }'
         local existing current tmp_file
-        existing="$(awk -v m="$MARKER" "$block_awk" "$target")"
-        current="$(printf '%s\n' "$ALIASES_BLOCK" | awk -v m="$MARKER" "$block_awk")"
+        existing="$(awk -v m="$MARKER" -v mode=block "$block_awk" "$target")"
+        current="$(printf '%s\n' "$ALIASES_BLOCK" | awk -v m="$MARKER" -v mode=block "$block_awk")"
         if [[ "$existing" == "$current" ]]; then
             ok "$name already has session-roam aliases (skipping)"
             return 0
@@ -53,7 +68,7 @@ install_to_file() {
         # directly, bypassing cr's lock): back up, drop it, append the current one.
         cp "$target" "${target}.session-roam.bak"
         tmp_file="${target}.roam-tmp.$$"
-        awk -v m="$MARKER" 'index($0, m) == 1 {skip = 1} skip && /^$/ {skip = 0; next} !skip' "$target" > "$tmp_file"
+        awk -v m="$MARKER" -v mode=strip "$block_awk" "$target" > "$tmp_file"
         printf '%s\n' "$ALIASES_BLOCK" >> "$tmp_file"
         cat "$tmp_file" > "$target"
         rm -f "$tmp_file"

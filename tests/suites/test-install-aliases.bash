@@ -105,6 +105,22 @@ assert_eq "$(cat "$HOME/.bash_aliases")" "$before" "second run changes nothing"
 assert_contains "$OUT$ERR" "already has session-roam aliases" "second run reports current block"
 t_end
 
+t_start "outdated block upgrade never deletes user lines (no blank line after block, CRLF file)"
+t_sandbox
+printf "# session-roam aliases — https://github.com/VirelNode/session-roam\nalias cs='claude -r'\nalias gs='git status'\n" > "$HOME/.bash_aliases"
+run_installer
+assert_contains "$(cat "$HOME/.bash_aliases")" "alias gs='git status'" "user line right after block kept"
+assert_eq "$(grep -c "alias cs='claude -r'" "$HOME/.bash_aliases")" 0 "old cs alias gone"
+t_sandbox
+printf "# before\r\n\r\n# session-roam aliases — https://github.com/VirelNode/session-roam\r\n# cs  = browse all sessions\r\nalias cs='claude -r'\r\n\r\n# after\r\nalias gs='git status'\r\n" > "$HOME/.bash_aliases"
+run_installer
+al="$(cat "$HOME/.bash_aliases")"
+assert_contains "$al" "alias gs='git status'" "CRLF: line after block kept"
+assert_contains "$al" "# before" "CRLF: line before block kept"
+assert_eq "$(grep -c "alias cs='claude -r'" "$HOME/.bash_aliases")" 0 "CRLF: old cs alias gone"
+assert_contains "$al" "alias cs='cr --browse'" "CRLF: current block present"
+t_end
+
 t_start "existing .stignore gains rules added to the template since it was installed"
 t_sandbox
 mkdir -p "$HOME/.claude/projects"
