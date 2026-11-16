@@ -230,16 +230,16 @@ signal_case() { # signal_case <sig> <expected_rc>
     setup_env
     # A non-interactive shell starts `&` jobs with SIGINT/SIGQUIT ignored, and
     # an ignored-on-entry signal cannot be trapped by the wrapper (bash 5.3
-    # enforces this; earlier bash did not always). A real terminal launches cr
-    # with default dispositions, so restore them before exec.
+    # enforces this). `trap - INT` inside the job is not enough: bash 3.2
+    # (macOS) keeps the ignore across exec. A real terminal launches cr with
+    # default dispositions, so reset them outside bash, via perl, then exec.
     (
-        trap - INT QUIT
         cd "$CWD"
         # ~10s ceiling; a natural timeout exits 99 so it can never look like a handled signal.
         export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=200 CLAUDE_STUB_TIMEOUT_RC=99
         export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
         export CLAUDE_STUB_READY="$SBX/stub.ready"
-        exec bash "$CR"
+        exec perl -e '$SIG{INT} = $SIG{QUIT} = "DEFAULT"; exec @ARGV or die "exec: $!"' bash "$CR"
     ) >"$SBX/out.txt" 2>&1 </dev/null &
     wrapper=$!
     wait_for_file "$(lockpath)" 10 || { fail_msg "lock never appeared before $sig"; kill -9 "$wrapper" 2>/dev/null; return 1; }
