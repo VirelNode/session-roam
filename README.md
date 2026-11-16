@@ -75,7 +75,7 @@ No central server. No cloud dependency. Peer-to-peer only.
 | `verify.sh` | Health check (10 dimensions: service, API, folder, peers, sessions, ignore, conflicts, shortcuts, agent isolation, session locks) |
 | `cr.sh` | Smart resume wrapper — namespace check, stale warning, cross-node session lock, --force bypass |
 | `lib/session-lock.sh` | Cross-node session lock: acquire/release/status, sourced by cr.sh and verify.sh |
-| `tests/` | Offline test suite (69 tests, stubbed externals, no daemon needed) |
+| `tests/` | Offline test suite (stubbed externals, no daemon needed) |
 | `.github/workflows/ci.yml` | CI: runs the suite on ubuntu + macOS runners, including macOS system bash 3.2 |
 | `CONVENTIONS.md` | Session namespacing conventions for multi-agent isolation |
 | `stignore.template` | Syncthing ignore patterns — skip worktrees, caches, keep sessions + memory |
@@ -85,6 +85,24 @@ No central server. No cloud dependency. Peer-to-peer only.
 1. **One active session at a time.** Exit your conversation before resuming on another machine. Two nodes writing the same `.jsonl` simultaneously will create sync conflicts. `cr` enforces this for you: each namespace carries a cross-node session lock (`~/.claude/projects/<namespace>/.roam-lock.json`, synced by Syncthing itself), so resuming a namespace that looks active elsewhere is blocked or requires confirmation. A node that crashed while holding the lock leaves it behind; `cr` auto-clears its own dead-pid locks and treats aged remote locks as probably-crashed (single `[y/N]`). `--force` overrides anything.
 2. **Context window limits apply.** A long session (100+ turns) will only load the most recent portion when resumed — older context gets compacted.
 3. **Investigate conflict files.** If `verify.sh` reports `.sync-conflict-*` files, it means concurrent writes happened. Check which version has the data you want.
+4. **Upgrading.** Re-run `./install-aliases.sh` after `git pull`. It redeploys `cr` and the lock library, and appends any new `stignore.template` rules your existing `.stignore` lacks (your own rules are kept as-is).
+
+## Privacy
+
+Session transcripts are not just your prompts. Recent Claude Code versions record the signed-in account's email and organization ID inside the `.jsonl`, and anything that passed through a tool call (file contents, command output, pasted keys) is in there too. session-roam copies those files verbatim, so:
+
+- Pair only machines you own and trust with your Claude account. Every peer gets a full copy.
+- Syncthing traffic is end-to-end encrypted between your devices, including when it goes through public relays, but the files sit unencrypted on each peer's disk.
+- Don't point the shared folder at a cloud-synced or shared directory.
+
+If you need to hand a single session to someone else, or across a boundary you don't control, use a tool that scrubs the transcript first (see below).
+
+## Other Approaches
+
+session-roam is for one person moving between their own always-on machines. Other tools from [anthropics/claude-code#31992](https://github.com/anthropics/claude-code/issues/31992) fit other cases:
+
+- [claude-handoff](https://github.com/NeoAcar/claude-handoff) exports one session to a checksummed file with secrets, email and org ID scrubbed, then imports it for `claude --resume` elsewhere. Better for occasional transfers or sharing.
+- If you only need to run commands on another OS, keep one session and have Claude use `ssh <host>` instead of moving the session.
 
 ## The Discovery Story
 
@@ -113,7 +131,7 @@ If you think this is cool, you should see what else we've pulled off. This is th
 ## Development
 
 ```bash
-make test      # 69-test offline suite — stubs replace syncthing/claude/API, runs in ~5s
+make test      # offline suite — stubs replace syncthing/claude/API, runs in ~5s
 make verify    # live health check of this node
 ```
 

@@ -72,6 +72,22 @@ assert_contains "$(cat "$HOME/.claude/projects/.stignore")" "MY CUSTOM IGNORES" 
 assert_contains "$OUT$ERR" "not overwriting" "warns about skipping"
 t_end
 
+t_start "existing .stignore gains rules added to the template since it was installed"
+t_sandbox
+mkdir -p "$HOME/.claude/projects"
+# An install from before the session lock existed: has worktrees, lacks the lock temp rule.
+printf 'MY CUSTOM IGNORES\n*worktrees*\n' > "$HOME/.claude/projects/.stignore"
+run_installer
+st="$(cat "$HOME/.claude/projects/.stignore")"
+assert_contains "$st" "MY CUSTOM IGNORES" "custom rule kept"
+assert_contains "$st" "*.roam-lock.tmp" "missing template rule appended"
+assert_eq "$(grep -cxF '*worktrees*' "$HOME/.claude/projects/.stignore")" 1 "rule already present is not duplicated"
+assert_eq "$(head -1 "$HOME/.claude/projects/.stignore")" "MY CUSTOM IGNORES" "existing lines stay first, in order"
+before="$(cat "$HOME/.claude/projects/.stignore")"
+run_installer
+assert_eq "$(cat "$HOME/.claude/projects/.stignore")" "$before" "second run changes nothing"
+t_end
+
 t_start "missing stignore.template warns but installation continues"
 t_sandbox
 mkdir -p "$SBX/isolated"
