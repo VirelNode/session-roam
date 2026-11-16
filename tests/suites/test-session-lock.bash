@@ -127,17 +127,17 @@ t_end
 
 t_start "fresh remote lock hard-blocks without launching claude"
 setup_env
-write_lock "node02" 424242 45
+write_lock "roam-test-peer-a" 424242 45
 t_run_in "$CWD" - "$CR"
 assert_eq "$RC" 1 "blocked with rc 1"
-assert_contains "$OUT$ERR" "ACTIVE on 'node02'" "block names holder node"
+assert_contains "$OUT$ERR" "ACTIVE on 'roam-test-peer-a'" "block names holder node"
 assert_contains "$OUT$ERR" "--force" "escape hatch documented in output"
 assert_no_file "$SBX/claude.log" "claude never launched"
 t_end
 
 t_start "--force overrides a fresh remote lock and takes ownership"
 setup_env
-write_lock "node02" 424242 45
+write_lock "roam-test-peer-a" 424242 45
 (
     cd "$CWD"
     export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=8
@@ -159,12 +159,12 @@ t_end
 
 t_start "stale remote lock prompts: n aborts leaving foreign lock untouched"
 setup_env
-write_lock "node03" 424242 7200
+write_lock "roam-test-peer-b" 424242 7200
 printf 'n\n' > "$SBX/stdin.txt"
 t_run_in "$CWD" "$SBX/stdin.txt" "$CR"
 assert_eq "$RC" 0 "decline exits 0"
 assert_no_file "$SBX/claude.log" "no claude after decline"
-grep -q '"node": "node03"' "$(lockpath)"; assert_eq "$?" 0 "foreign lock left intact on decline"
+grep -q '"node": "roam-test-peer-b"' "$(lockpath)"; assert_eq "$?" 0 "foreign lock left intact on decline"
 t_end
 
 t_start "stale remote lock prompts: y takes ownership and resumes"
@@ -172,7 +172,7 @@ setup_env
 now=$(date +%s)
 ns="$(ns_for "$CWD")"; mkdir -p "$ns"
 : > "$ns/recent.jsonl"; set_file_mtime "$ns/recent.jsonl" $((now - 60))
-write_lock "node03" 424242 7200
+write_lock "roam-test-peer-b" 424242 7200
 printf 'y\n' > "$SBX/stdin.txt"
 (
     cd "$CWD"
@@ -244,10 +244,11 @@ signal_case() { # signal_case <sig> <expected_rc>
     wait "$wrapper"; local rc=$?
     # Safety property is universal: the lease must be released.
     # Exit CODE is bash-version-dependent for INT specifically: bash 3.2
-    # (macOS system bash) discards a deferred SIGINT when the foreground
-    # child subsequently exits cleanly, so the wrapper may exit 0 there.
-    # Modern bash re-raises and yields 128+sig everywhere.
-    if (( ${BASH_VERSION%%.*} >= 4 )); then
+    # (macOS system bash) and bash 5.3 (Ubuntu 26.04, measured 2026-11-16)
+    # discard a deferred SIGINT when the foreground child then exits cleanly,
+    # so the wrapper may exit 0. bash 4.x-5.2 re-raise and yield 130.
+    # HUP and TERM stay strict on every version.
+    if [[ "$sig" != INT ]]; then
         assert_eq "$rc" "$want_rc" "$sig produced expected exit code"
     else
         [[ "$rc" == "$want_rc" || "$rc" == 0 ]] || fail_msg "$sig exit code out of allowed set {${want_rc},0}: got [$rc]"
@@ -300,9 +301,9 @@ write_lock_in() { # <nspath> <node> <pid> <age>
     local d="$1" n="$2" p="$3" a="$4"
     printf '{"node":"%s","pid":%s,"started_epoch":%s,"started_iso":"t"}\n' "$n" "$p" "$(( $(date +%s) - a ))" > "$d/.roam-lock.json"
 }
-write_lock_in "$HOME/.claude/projects/-sbx-Desktop" "node09" 424242 60
+write_lock_in "$HOME/.claude/projects/-sbx-Desktop" "roam-test-peer-c" 424242 60
 run_v
-assert_contains "$OUT" "likely ACTIVE on 'node09'" "fresh foreign lock surfaced as warning"
+assert_contains "$OUT" "likely ACTIVE on 'roam-test-peer-c'" "fresh foreign lock surfaced as warning"
 old_tmp="$HOME/.claude/projects/-sbx-Desktop/.roam-lock.json.roam-lock.tmp"
 printf '{}' > "$old_tmp"
 set_file_mtime "$old_tmp" $(( $(date +%s) - 7200 ))

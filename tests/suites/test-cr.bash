@@ -87,11 +87,11 @@ t_start "EOF stdin at remote-stale lock prompt aborts safely (default N) leaving
 setup_cr_env
 mkdir -p "$(ns_for "$CWD")"
 cat > "$(ns_for "$CWD")/.roam-lock.json" <<'LOCK'
-{"node": "node03", "pid": 424242, "tty": "test", "started_epoch": 1, "started_iso": "test", "session_file": "x.jsonl"}
+{"node": "roam-test-peer-b", "pid": 424242, "tty": "test", "started_epoch": 1, "started_iso": "test", "session_file": "x.jsonl"}
 LOCK
 run_cr
 assert_eq "$RC" 0 "EOF at lock prompt declines cleanly"
-grep -q '"node": "node03"' "$(ns_for "$CWD")/.roam-lock.json"; assert_eq "$?" 0 "foreign lock untouched"
+grep -q '"node": "roam-test-peer-b"' "$(ns_for "$CWD")/.roam-lock.json"; assert_eq "$?" 0 "foreign lock untouched"
 assert_no_file "$SBX/claude.log" "no claude after decline"
 t_end
 
@@ -179,7 +179,7 @@ t_start "force + search combination overrides a foreign lock and reaches claude 
 setup_cr_env
 mkdir -p "$(ns_for "$CWD")"
 cat > "$(ns_for "$CWD")/.roam-lock.json" <<'LOCK'
-{"node": "node02", "pid": 424242, "tty": "test", "started_epoch": 9999999999, "started_iso": "old", "session_file": "x.jsonl"}
+{"node": "roam-test-peer-a", "pid": 424242, "tty": "test", "started_epoch": 9999999999, "started_iso": "old", "session_file": "x.jsonl"}
 LOCK
 run_cr --force --search keyword
 assert_eq "$RC" 0 "force+search overrides foreign lock"
