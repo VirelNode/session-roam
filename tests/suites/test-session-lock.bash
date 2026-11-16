@@ -59,7 +59,7 @@ setup_env
 assert_file "$(lockpath)"
 ( source "$LIB"; lock_release "$(ns_for "$CWD")" )
 assert_no_file "$(lockpath)" "own lock released"
-write_lock "node-remote" 999999999 60
+write_lock "${PEER_PREFIX}-d" 999999999 60
 ( source "$LIB"; lock_release "$(ns_for "$CWD")" )
 assert_file "$(lockpath)" "foreign lock survives release attempt"
 rm -f "$(lockpath)"
@@ -81,10 +81,10 @@ lib_tty() {
 assert_eq "$(lib_tty)" "test" "tty field extracted from lock JSON"
 kill -9 "$live_pid" 2>/dev/null; wait "$live_pid" 2>/dev/null
 assert_eq "$(lib_classify "$(ns_for "$CWD")")" "self-stale" "own node dead pid -> self-stale"
-write_lock "node-remote" 424242 10
+write_lock "${PEER_PREFIX}-d" 424242 10
 assert_eq "$(lib_classify "$(ns_for "$CWD")")" "remote-fresh" "remote young lock -> remote-fresh"
 assert_eq "$(lib_classify "$(ns_for "$CWD")" 5)" "remote-stale" "custom threshold flips classification (boundary above)"
-write_lock "node-remote" 424242 5000
+write_lock "${PEER_PREFIX}-d" 424242 5000
 assert_eq "$(lib_classify "$(ns_for "$CWD")")" "remote-stale" "remote old lock -> remote-stale"
 printf 'this is not json {' > "$(lockpath)"
 assert_eq "$(lib_classify "$(ns_for "$CWD")")" "unknown" "corrupt lock -> unknown (fail closed)"
@@ -93,9 +93,9 @@ t_end
 t_start "ROAM_FRESH_SECS boundary is honored exactly"
 setup_env
 export ROAM_FRESH_SECS=100
-write_lock "node-remote" 424242 99
+write_lock "${PEER_PREFIX}-d" 424242 99
 assert_eq "$(lib_classify "$(ns_for "$CWD")")" "remote-fresh" "age < threshold stays fresh"
-write_lock "node-remote" 424242 101
+write_lock "${PEER_PREFIX}-d" 424242 101
 assert_eq "$(lib_classify "$(ns_for "$CWD")")" "remote-stale" "age > threshold goes stale"
 unset ROAM_FRESH_SECS
 t_end
@@ -127,17 +127,17 @@ t_end
 
 t_start "fresh remote lock hard-blocks without launching claude"
 setup_env
-write_lock "roam-test-peer-a" 424242 45
+write_lock "${PEER_PREFIX}-a" 424242 45
 t_run_in "$CWD" - "$CR"
 assert_eq "$RC" 1 "blocked with rc 1"
-assert_contains "$OUT$ERR" "ACTIVE on 'roam-test-peer-a'" "block names holder node"
+assert_contains "$OUT$ERR" "ACTIVE on '${PEER_PREFIX}-a'" "block names holder node"
 assert_contains "$OUT$ERR" "--force" "escape hatch documented in output"
 assert_no_file "$SBX/claude.log" "claude never launched"
 t_end
 
 t_start "--force overrides a fresh remote lock and takes ownership"
 setup_env
-write_lock "roam-test-peer-a" 424242 45
+write_lock "${PEER_PREFIX}-a" 424242 45
 (
     cd "$CWD"
     export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=8
@@ -159,12 +159,12 @@ t_end
 
 t_start "stale remote lock prompts: n aborts leaving foreign lock untouched"
 setup_env
-write_lock "roam-test-peer-b" 424242 7200
+write_lock "${PEER_PREFIX}-b" 424242 7200
 printf 'n\n' > "$SBX/stdin.txt"
 t_run_in "$CWD" "$SBX/stdin.txt" "$CR"
 assert_eq "$RC" 0 "decline exits 0"
 assert_no_file "$SBX/claude.log" "no claude after decline"
-grep -q '"node": "roam-test-peer-b"' "$(lockpath)"; assert_eq "$?" 0 "foreign lock left intact on decline"
+grep -q "\"node\": \"${PEER_PREFIX}-b\"" "$(lockpath)"; assert_eq "$?" 0 "foreign lock left intact on decline"
 t_end
 
 t_start "stale remote lock prompts: y takes ownership and resumes"
@@ -172,7 +172,7 @@ setup_env
 now=$(date +%s)
 ns="$(ns_for "$CWD")"; mkdir -p "$ns"
 : > "$ns/recent.jsonl"; set_file_mtime "$ns/recent.jsonl" $((now - 60))
-write_lock "roam-test-peer-b" 424242 7200
+write_lock "${PEER_PREFIX}-b" 424242 7200
 printf 'y\n' > "$SBX/stdin.txt"
 (
     cd "$CWD"
@@ -228,30 +228,37 @@ t_end
 signal_case() { # signal_case <sig> <expected_rc>
     local sig="$1" want_rc="$2" wrapper
     setup_env
+    # A non-interactive shell starts `&` jobs with SIGINT/SIGQUIT ignored, and
+    # an ignored-on-entry signal cannot be trapped by the wrapper (bash 5.3
+    # enforces this; earlier bash did not always). A real terminal launches cr
+    # with default dispositions, so restore them before exec.
     (
+        trap - INT QUIT
         cd "$CWD"
-        export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=5
+        # ~10s ceiling; a natural timeout exits 99 so it can never look like a handled signal.
+        export CLAUDE_STUB_MODE=wait-signal CLAUDE_STUB_MAX_WAIT=200 CLAUDE_STUB_TIMEOUT_RC=99
         export CLAUDE_STUB_RELEASE="$SBX/release.flag" CLAUDE_STUB_LOG="$SBX/claude.log"
+        export CLAUDE_STUB_READY="$SBX/stub.ready"
         exec bash "$CR"
     ) >"$SBX/out.txt" 2>&1 </dev/null &
     wrapper=$!
     wait_for_file "$(lockpath)" 10 || { fail_msg "lock never appeared before $sig"; kill -9 "$wrapper" 2>/dev/null; return 1; }
+    wait_for_file "$SBX/stub.ready" 10 || { fail_msg "claude stub never became ready before $sig"; kill -9 "$wrapper" 2>/dev/null; return 1; }
     # A terminal delivers ^C/^\ to the whole foreground process group: the
     # shell AND the running child. Signal both explicitly.
     kill -"$sig" "$wrapper" 2>/dev/null
     pkill -"$sig" -P "$wrapper" 2>/dev/null
 
+    # Bounded wait: the wrapper must finish promptly after the signal.
+    local i=0
+    while kill -0 "$wrapper" 2>/dev/null && (( i < 100 )); do /bin/sleep 0.05; i=$((i + 1)); done
+    if kill -0 "$wrapper" 2>/dev/null; then
+        fail_msg "wrapper still running 5s after $sig"; kill -9 "$wrapper" 2>/dev/null
+    fi
     wait "$wrapper"; local rc=$?
-    # Safety property is universal: the lease must be released.
-    # Exit CODE is bash-version-dependent for INT specifically: bash 3.2
-    # (macOS system bash) and bash 5.3 (Ubuntu 26.04, measured 2026-11-16)
-    # discard a deferred SIGINT when the foreground child then exits cleanly,
-    # so the wrapper may exit 0. bash 4.x-5.2 re-raise and yield 130.
-    # HUP and TERM stay strict on every version.
-    if [[ "$sig" != INT ]]; then
-        assert_eq "$rc" "$want_rc" "$sig produced expected exit code"
-    else
-        [[ "$rc" == "$want_rc" || "$rc" == 0 ]] || fail_msg "$sig exit code out of allowed set {${want_rc},0}: got [$rc]"
+    assert_eq "$rc" "$want_rc" "$sig produced expected exit code"
+    if [[ "$sig" == INT ]]; then
+        grep -q 'stub-got-INT' "$SBX/claude.log" 2>/dev/null; assert_eq "$?" 0 "claude child saw the INT"
     fi
     assert_no_file "$(lockpath)" "lock released on $sig"
     printf 'x' > "$SBX/release.flag" 2>/dev/null || true
@@ -301,9 +308,9 @@ write_lock_in() { # <nspath> <node> <pid> <age>
     local d="$1" n="$2" p="$3" a="$4"
     printf '{"node":"%s","pid":%s,"started_epoch":%s,"started_iso":"t"}\n' "$n" "$p" "$(( $(date +%s) - a ))" > "$d/.roam-lock.json"
 }
-write_lock_in "$HOME/.claude/projects/-sbx-Desktop" "roam-test-peer-c" 424242 60
+write_lock_in "$HOME/.claude/projects/-sbx-Desktop" "${PEER_PREFIX}-c" 424242 60
 run_v
-assert_contains "$OUT" "likely ACTIVE on 'roam-test-peer-c'" "fresh foreign lock surfaced as warning"
+assert_contains "$OUT" "likely ACTIVE on '${PEER_PREFIX}-c'" "fresh foreign lock surfaced as warning"
 old_tmp="$HOME/.claude/projects/-sbx-Desktop/.roam-lock.json.roam-lock.tmp"
 printf '{}' > "$old_tmp"
 set_file_mtime "$old_tmp" $(( $(date +%s) - 7200 ))

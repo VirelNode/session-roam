@@ -5,6 +5,9 @@ T_PASS=0 T_FAIL=0 T_SKIP=0
 T_CURRENT="" T_FAILED_NOW=0
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Fake "other node" names for lock tests. Derived from this host so they can never
+# equal $(hostname), whatever the machine is called.
+PEER_PREFIX="$(hostname)-roamtest"
 STUB_DIR="$REPO_ROOT/tests/stubs"
 
 t_start() { T_CURRENT="$1"; T_FAILED_NOW=0; }
