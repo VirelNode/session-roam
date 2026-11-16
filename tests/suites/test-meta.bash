@@ -20,8 +20,16 @@ t_sandbox
 printf 'printf "%%s" "$BASH_VERSION"\n' > "$SBX/ver.sh"
 t_run_in "$SBX" - "$SBX/ver.sh"
 assert_eq "$OUT" "$BASH_VERSION" "t_run_in child reports the suite's bash version"
-# Any bare `bash <script>` / `bash -c` / `bash -n` launch in the harness would bypass this.
-hits="$(grep -nE '(^|[^a-zA-Z/"$_.-])bash +("|-c|-n|\$)' "$REPO_ROOT"/tests/run.sh "$REPO_ROOT"/tests/helpers.bash "$REPO_ROOT"/tests/suites/*.bash | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -v 'grep -nE')"
+# A launch of PATH bash (`bash <script>`, `bash -opts "$x"`, `bash -c`, `bash -n`,
+# `exec bash`, `$(bash ...)`) in the harness would bypass "$BASH".
+LAUNCH_RE='(^|[^A-Za-z0-9_/"$.-])bash[[:space:]]+(-[A-Za-z]+[[:space:]]+)*(["'"'"'$]|[A-Za-z0-9_./-]+\.(ba)?sh([^A-Za-z0-9]|$))'
+for good in 'bash tests/example.bash' 'bash -eu "$x"' "bash 'x.sh'" $'bash\t"$x"' 'exec bash "$CR"' "bash -c 'echo'" 'bash -n "$f"' 'x=$(bash "$s")'; do
+    printf '%s\n' "$good" | grep -qE "$LAUNCH_RE" || fail_msg "guard misses launch: $good"
+done
+for bad in "printf 'bash -c example\n'" '"$BASH" "$CR"' 'printf "bash under test: %s"' 't_start "of the bash under test"'; do
+    printf '%s\n' "$bad" | grep -qE "$LAUNCH_RE" && fail_msg "guard flags non-launch: $bad"
+done
+hits="$(grep -nE "$LAUNCH_RE" "$REPO_ROOT"/tests/run.sh "$REPO_ROOT"/tests/helpers.bash "$REPO_ROOT"/tests/suites/*.bash | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -v 'LAUNCH_RE=' | grep -vE ':[0-9]+:for (good|bad) in ')"
 [[ -z "$hits" ]] || fail_msg "PATH-bash launches found: $hits"
 t_end
 

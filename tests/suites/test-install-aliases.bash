@@ -121,6 +121,39 @@ assert_eq "$(grep -c "alias cs='claude -r'" "$HOME/.bash_aliases")" 0 "CRLF: old
 assert_contains "$al" "alias cs='cr --browse'" "CRLF: current block present"
 t_end
 
+t_start "block upgrade keeps rc valid shell, removes every stale duplicate, ignores look-alike markers"
+t_sandbox
+# A user-edited multi-line cf with a blank line inside: must not be split.
+printf '# session-roam aliases — https://github.com/VirelNode/session-roam\nalias cs='"'"'claude -r'"'"'\ncf() {\n  claude -r "$*"\n\n}\n' > "$HOME/.bash_aliases"
+run_installer
+"$BASH" -n "$HOME/.bash_aliases"; assert_eq "$?" 0 "rc file still parses after upgrade"
+assert_contains "$(cat "$HOME/.bash_aliases")" "cf() { cr --search" "current cf appended (later definition wins)"
+# A current block followed by a stale April block.
+t_sandbox
+run_installer
+printf '\n# session-roam aliases — https://github.com/VirelNode/session-roam\ncf() { claude -r "$*"; }\n' >> "$HOME/.bash_aliases"
+run_installer
+assert_eq "$(grep -c 'claude -r' "$HOME/.bash_aliases")" 0 "stale duplicate block removed"
+assert_eq "$(grep -cF '# session-roam aliases' "$HOME/.bash_aliases")" 1 "exactly one block left"
+# A user comment that merely starts with the marker text is not a block.
+t_sandbox
+printf '# session-roam aliases customization\nexport KEEP=1\n' > "$HOME/.bash_aliases"
+run_installer
+assert_contains "$(cat "$HOME/.bash_aliases")" "# session-roam aliases customization" "look-alike comment kept"
+assert_contains "$(cat "$HOME/.bash_aliases")" "export KEEP=1" "line after look-alike kept"
+t_end
+
+t_start "a second upgrade does not overwrite the first backup"
+t_sandbox
+printf '# session-roam aliases — https://github.com/VirelNode/session-roam\nalias cs='"'"'claude -r'"'"'\n' > "$HOME/.bash_aliases"
+run_installer
+first="$(cat "$HOME/.bash_aliases.session-roam.bak")"
+printf '\n# session-roam aliases — https://github.com/VirelNode/session-roam\nalias cs='"'"'claude -r'"'"'\n' >> "$HOME/.bash_aliases"
+run_installer
+assert_eq "$(cat "$HOME/.bash_aliases.session-roam.bak")" "$first" "original backup preserved"
+assert_eq "$(ls "$HOME"/.bash_aliases.session-roam.bak* | wc -l | tr -d ' ')" 2 "second backup written alongside"
+t_end
+
 t_start "existing .stignore gains rules added to the template since it was installed"
 t_sandbox
 mkdir -p "$HOME/.claude/projects"

@@ -40,39 +40,46 @@ install_to_file() {
     fi
 
     if grep -qF "$MARKER" "$target" 2>/dev/null; then
-        # The block is the marker line plus the run of lines session-roam itself
-        # writes right after it: "# cs  = ..." comments and alias/function
-        # definitions for its own six names, optionally ended by one blank line.
-        # The first unrecognised line ends the block and is always kept, so a
-        # user's lines can never be deleted. Trailing \r is ignored (CRLF files).
-        # mode=block prints the block (minus the blank); mode=strip prints the rest.
+        # A block starts at a marker line ("# session-roam aliases" alone or
+        # followed by " — ", as every version wrote it) and runs over the lines
+        # session-roam itself writes: "# <name>  =" comments, alias lines and
+        # ONE-LINE function definitions for its own six names. The first
+        # unrecognised line ends it and is always kept, so user lines (including
+        # a hand-edited multi-line function) are never deleted or split; the
+        # current block appended later overrides them. Every block in the file
+        # is handled, so a stale duplicate can't hide behind a current one.
+        # Trailing \r is ignored (CRLF files).
+        # mode=block prints every block (minus the blank); mode=strip prints the rest.
         local block_awk='
             { l = $0; sub(/\r$/, "", l) }
-            !inb && !done && index(l, m) == 1 { inb = 1; if (mode == "block") print l; next }
+            l == m || index(l, m " — ") == 1 { inb = 1; if (mode == "block") print l; next }
             inb {
-                if (l ~ /^# (cr|cs|cf|cn|cfork|crf) +=/ || l ~ /^alias (cr|cs|cf|cn|cfork|crf)=/ || l ~ /^(cs|cf|cn|cfork|crf)\(\) /) {
+                if (l ~ /^# (cr|cs|cf|cn|cfork|crf) +=/ || l ~ /^alias (cr|cs|cf|cn|cfork|crf)=/ || l ~ /^(cs|cf|cn|cfork|crf)\(\) *\{.*\} *$/) {
                     if (mode == "block") print l; next
                 }
-                inb = 0; done = 1
+                inb = 0
                 if (l == "") next
             }
             mode == "strip" { print }'
-        local existing current tmp_file
+        local existing current tmp_file backup
         existing="$(awk -v m="$MARKER" -v mode=block "$block_awk" "$target")"
         current="$(printf '%s\n' "$ALIASES_BLOCK" | awk -v m="$MARKER" -v mode=block "$block_awk")"
         if [[ "$existing" == "$current" ]]; then
             ok "$name already has session-roam aliases (skipping)"
             return 0
         fi
-        # Outdated block from an earlier install (e.g. cs/cf calling claude
-        # directly, bypassing cr's lock): back up, drop it, append the current one.
-        cp "$target" "${target}.session-roam.bak"
+        # Outdated, duplicated or missing block (e.g. April 2026 cs/cf calling
+        # claude directly, bypassing cr's lock): back up, drop blocks, append the
+        # current one. An earlier backup is never overwritten.
+        backup="${target}.session-roam.bak"
+        [[ -e "$backup" ]] && backup="${backup}.$(date +%Y%m%d%H%M%S).$$"
+        cp "$target" "$backup"
         tmp_file="${target}.roam-tmp.$$"
         awk -v m="$MARKER" -v mode=strip "$block_awk" "$target" > "$tmp_file"
         printf '%s\n' "$ALIASES_BLOCK" >> "$tmp_file"
         cat "$tmp_file" > "$target"
         rm -f "$tmp_file"
-        ok "Updated outdated session-roam aliases in $name (backup: ${target}.session-roam.bak)"
+        ok "Updated outdated session-roam aliases in $name (backup: $backup)"
         return 0
     fi
 
