@@ -72,6 +72,39 @@ assert_contains "$(cat "$HOME/.claude/projects/.stignore")" "MY CUSTOM IGNORES" 
 assert_contains "$OUT$ERR" "not overwriting" "warns about skipping"
 t_end
 
+t_start "outdated session-roam alias block is replaced; surrounding lines and a backup kept"
+t_sandbox
+# The April 2026 block: same marker, but cs/cf call claude directly and bypass cr's lock.
+cat > "$HOME/.bash_aliases" <<'OLD'
+# my stuff before
+alias ll='ls -l'
+
+# session-roam aliases — https://github.com/VirelNode/session-roam
+# cs  = browse all sessions
+alias cs='claude -r'
+cf() { claude -r "$*"; }
+alias crf='sleep 2 && claude -c --fork-session'
+
+# my stuff after
+alias gs='git status'
+OLD
+run_installer
+assert_eq "$RC" 0 "installer exits 0"
+al="$(cat "$HOME/.bash_aliases")"
+assert_contains "$al" "alias cs='cr --browse'" "cs now routes through cr"
+assert_contains "$al" 'cf() { cr --search' "cf now routes through cr"
+assert_eq "$(grep -c "alias cs='claude -r'" "$HOME/.bash_aliases")" 0 "old cs alias gone"
+assert_eq "$(grep -cF '# session-roam aliases' "$HOME/.bash_aliases")" 1 "exactly one block"
+assert_contains "$al" "alias ll='ls -l'" "line before block kept"
+assert_contains "$al" "alias gs='git status'" "line after block kept"
+assert_file "$HOME/.bash_aliases.session-roam.bak" "backup of the pre-upgrade file written"
+assert_contains "$OUT$ERR" "Updated outdated session-roam aliases" "upgrade reported"
+before="$(cat "$HOME/.bash_aliases")"
+run_installer
+assert_eq "$(cat "$HOME/.bash_aliases")" "$before" "second run changes nothing"
+assert_contains "$OUT$ERR" "already has session-roam aliases" "second run reports current block"
+t_end
+
 t_start "existing .stignore gains rules added to the template since it was installed"
 t_sandbox
 mkdir -p "$HOME/.claude/projects"

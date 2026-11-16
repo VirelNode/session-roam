@@ -40,7 +40,24 @@ install_to_file() {
     fi
 
     if grep -qF "$MARKER" "$target" 2>/dev/null; then
-        ok "$name already has session-roam aliases (skipping)"
+        # The block runs from the marker line to the next blank line.
+        local block_awk='index($0, m) == 1 {f = 1} f && /^$/ {exit} f'
+        local existing current tmp_file
+        existing="$(awk -v m="$MARKER" "$block_awk" "$target")"
+        current="$(printf '%s\n' "$ALIASES_BLOCK" | awk -v m="$MARKER" "$block_awk")"
+        if [[ "$existing" == "$current" ]]; then
+            ok "$name already has session-roam aliases (skipping)"
+            return 0
+        fi
+        # Outdated block from an earlier install (e.g. cs/cf calling claude
+        # directly, bypassing cr's lock): back up, drop it, append the current one.
+        cp "$target" "${target}.session-roam.bak"
+        tmp_file="${target}.roam-tmp.$$"
+        awk -v m="$MARKER" 'index($0, m) == 1 {skip = 1} skip && /^$/ {skip = 0; next} !skip' "$target" > "$tmp_file"
+        printf '%s\n' "$ALIASES_BLOCK" >> "$tmp_file"
+        cat "$tmp_file" > "$target"
+        rm -f "$tmp_file"
+        ok "Updated outdated session-roam aliases in $name (backup: ${target}.session-roam.bak)"
         return 0
     fi
 
