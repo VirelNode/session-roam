@@ -37,15 +37,18 @@ jobs:
                   super().__init__()
                   self.ignored = []
                   self.heading = None
+                  self.code = None
                   self.title = []
                   self.events = []
 
               def handle_starttag(self, tag, attrs):
-                  if tag in {"blockquote", "pre", "details", "script", "style"}:
+                  if tag in {"blockquote", "details", "script", "style"}:
                       self.ignored.append(tag)
-                  if self.ignored:
+                  if self.ignored or self.code is not None:
                       return
-                  if re.fullmatch("h[1-6]", tag):
+                  if tag == "pre":
+                      self.code = []
+                  elif re.fullmatch("h[1-6]", tag):
                       self.heading = int(tag[1])
                       self.title = []
 
@@ -54,6 +57,11 @@ jobs:
                       if tag == self.ignored[-1]:
                           self.ignored.pop()
                       return
+                  if self.code is not None:
+                      if tag == "pre":
+                          self.events.append((-1, "".join(self.code)))
+                          self.code = None
+                      return
                   if self.heading and tag == f"h{self.heading}":
                       self.events.append((self.heading, "".join(self.title).strip()))
                       self.heading = None
@@ -61,7 +69,9 @@ jobs:
               def handle_data(self, data):
                   if self.ignored:
                       return
-                  if self.heading:
+                  if self.code is not None:
+                      self.code.append(data)
+                  elif self.heading:
                       self.title.append(data)
                   else:
                       self.events.append((0, data))
@@ -75,8 +85,20 @@ jobs:
                         "Not touched": r"(?:not touched|what (?:this pr )?(?:did not touch|deliberately left alone)|untouched|left alone)\b",
                         "How to verify": r"(?:how to verif|verification\b)"}
               depth, field, parts = 0, None, {}
+              verification_command = False
               for level, text in parser.events:
-                  if level:
+                  if level == -1:
+                      if depth and field:
+                          # Code can fill in an existing field. Its text never defines headings.
+                          lines = re.sub(r"<!--.*?-->", "", text, flags=re.S).splitlines()
+                          for line in (value.strip() for value in lines):
+                              if (not re.search(r"\w", line) or line.startswith("#")
+                                      or re.fullmatch(r"<[^<>]+>|(?:todo|tbd|placeholder)(?:[ :].*)?", line, re.I)):
+                                  continue
+                              parts[field].append(line)
+                              if field == "How to verify":
+                                  verification_command = True
+                  elif level:
                       if depth and level <= depth:
                           break
                       if not depth and level in (2, 3) and re.match(r"scope\b", text, re.I):
@@ -88,7 +110,8 @@ jobs:
                               parts.setdefault(field, [])
                   elif depth and field:
                       parts[field].append(text)
-              return all(len(re.sub(r"[^\w]", "", " ".join(parts.get(name, [])))) >= 10
+              return all((name == "How to verify" and verification_command)
+                         or len(re.sub(r"[^\w]", "", " ".join(parts.get(name, [])))) >= 10
                          for name in fields)
 
 
