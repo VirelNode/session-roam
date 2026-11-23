@@ -1,0 +1,76 @@
+name: PR scope check
+
+# Fails a PR whose description lacks a filled-in Scope section
+# (Touched / Not touched / How to verify). See .github/pull_request_template.md.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+jobs:
+  scope:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the Scope section
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+
+          body = os.environ.get("PR_BODY") or ""
+          body = re.sub(r"<!--.*?-->", "", body, flags=re.S)  # template hints don't count
+
+          def section(text, title_re, level):
+              """Text under a heading matching title_re, up to the next heading of the same or higher level."""
+              lines, out, inside = text.splitlines(), [], False
+              for line in lines:
+                  m = re.match(r"^(#{1,6})\s+(.*?)\s*#*\s*$", line)
+                  if m:
+                      depth, title = len(m.group(1)), m.group(2)
+                      if inside and depth <= level:
+                          break
+                      if not inside and depth == level and re.search(title_re, title, re.I):
+                          inside = True
+                          continue
+                  if inside:
+                      out.append(line)
+              return "\n".join(out) if inside else None
+
+          def filled(text):
+              if text is None:
+                  return False
+              words = re.sub(r"[#*_`>\-\[\]\s]+", " ", text).strip()
+              return len(words) >= 10 and not re.fullmatch(r"(?i)(n/?a|tbd|todo|none|\.+)", words)
+
+          scope = None
+          for level in (2, 3):
+              scope = section(body, r"^scope\b", level)
+              if scope is not None:
+                  sub = level + 1
+                  break
+          problems = []
+          if scope is None:
+              problems.append('No "## Scope" heading in the PR description.')
+          else:
+              parts = {
+                  "Touched": r"^(what (this pr )?)?touched\b",
+                  "Not touched": r"\b(not touched|did not touch|deliberately|untouched|left alone)\b",
+                  "How to verify": r"\bverif",
+              }
+              for name, pat in parts.items():
+                  if not filled(section(scope, pat, sub)):
+                      problems.append(f'Scope > "{name}" is missing or empty (write at least a short sentence).')
+
+          if problems:
+              print("PR scope check failed:")
+              for p in problems:
+                  print(f"  - {p}")
+              print("Fill in the Scope section from .github/pull_request_template.md and edit the PR description; the check reruns on edit.")
+              sys.exit(1)
+          print("Scope section is filled in.")
+          PY
