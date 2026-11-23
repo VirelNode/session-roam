@@ -1,0 +1,143 @@
+name: PR scope check
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: pr-scope-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Validate rendered Scope and report against the PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 -I - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          from html.parser import HTMLParser
+
+
+          class Sections(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.ignored = []
+                  self.heading = None
+                  self.title = []
+                  self.events = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag in {"blockquote", "pre", "details", "script", "style"}:
+                      self.ignored.append(tag)
+                  if self.ignored:
+                      return
+                  if re.fullmatch("h[1-6]", tag):
+                      self.heading = int(tag[1])
+                      self.title = []
+
+              def handle_endtag(self, tag):
+                  if self.ignored:
+                      if tag == self.ignored[-1]:
+                          self.ignored.pop()
+                      return
+                  if self.heading and tag == f"h{self.heading}":
+                      self.events.append((self.heading, "".join(self.title).strip()))
+                      self.heading = None
+
+              def handle_data(self, data):
+                  if self.ignored:
+                      return
+                  if self.heading:
+                      self.title.append(data)
+                  else:
+                      self.events.append((0, data))
+
+
+          def valid_scope(html):
+              parser = Sections()
+              parser.feed(html)
+              parser.close()
+              fields = {"Touched": r"(?:what (?:this pr )?)?touched\b",
+                        "Not touched": r"(?:not touched|what (?:this pr )?(?:did not touch|deliberately left alone)|untouched|left alone)\b",
+                        "How to verify": r"(?:how to verif|verification\b)"}
+              depth, field, parts = 0, None, {}
+              for level, text in parser.events:
+                  if level:
+                      if depth and level <= depth:
+                          break
+                      if not depth and level in (2, 3) and re.match(r"scope\b", text, re.I):
+                          depth = level
+                      elif depth and level == depth + 1:
+                          field = next((name for name, pattern in fields.items()
+                                        if re.match(pattern, text, re.I)), None)
+                          if field:
+                              parts.setdefault(field, [])
+                  elif depth and field:
+                      parts[field].append(text)
+              return all(len(re.sub(r"[^\w]", "", " ".join(parts.get(name, [])))) >= 10
+                         for name in fields)
+
+
+          def api(*args):
+              return subprocess.check_output(
+                  ["gh", "api", "-H", "X-GitHub-Api-Version: 2022-11-28", *args],
+                  stderr=subprocess.DEVNULL)
+
+
+          def main():
+              # All API paths come from the base-repo context. Candidate text stays in memory.
+              repo = os.environ["GITHUB_REPOSITORY"]
+              with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as stream:
+                  event = json.load(stream)
+              number = event["number"]
+              head = event["pull_request"]["head"]["sha"]
+              if type(number) is not int or number < 1 or not re.fullmatch("[a-f0-9]{40}", head):
+                  raise ValueError("Invalid GitHub event")
+
+              def status(state, description):
+                  api("--method", "POST", "--silent", f"repos/{repo}/statuses/{head}",
+                      "-f", f"state={state}", "-f", "context=PR scope check",
+                      "-f", f"description={description}",
+                      "-f", f"target_url={os.environ['GITHUB_SERVER_URL']}/{repo}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
+
+              status("pending", "Checking the current pull request description")
+              try:
+                  pr = json.loads(api("-H", "Accept: application/vnd.github.html+json",
+                                      f"repos/{repo}/pulls/{number}"))
+                  if pr["number"] != number or pr["base"]["repo"]["full_name"].lower() != repo.lower():
+                      raise ValueError("Unexpected pull request")
+                  if pr["head"]["sha"] != head:
+                      status("error", "This pull request head has been superseded")
+                      return 0
+                  # Keep the existing exemption for genuine Dependabot pull requests.
+                  if pr["user"]["login"] == "dependabot[bot]":
+                      status("success", "Dependabot pull request")
+                      return 0
+                  valid = valid_scope(pr["body_html"] or "")
+              except (KeyError, TypeError, ValueError, OSError, subprocess.CalledProcessError):
+                  status("error", "Could not verify the pull request description")
+                  return 1
+              if valid:
+                  status("success", "Scope, changed areas, exclusions and verification are present")
+                  return 0
+              status("failure", "Fill in Touched, Not touched and How to verify under Scope")
+              return 1
+
+
+          if __name__ == "__main__":
+              sys.exit(main())
+          PY

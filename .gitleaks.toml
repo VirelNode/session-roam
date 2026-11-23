@@ -1,0 +1,21 @@
+title = "Forward credential scan"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "postgres-url-password"
+description = "Literal password in a PostgreSQL connection URI"
+regex = '''(?i)\bpostgres(?:ql)?://[^\s/:@?#"]*:[^\s/@?#"]+@'''
+keywords = ["postgres"]
+
+[[rules]]
+id = "credentialed-database-url"
+description = "Database or broker URL carrying a literal password"
+regex = '''(?i)(?:mysql|mariadb|mongodb(?:\+srv)?|amqps?|rediss?)://[^\s/@:]{0,96}:([^\s/@$<>{}]{3,160})@'''
+secretGroup = 1
+[[rules]]
+id = "pgpassword-assignment"
+description = "Literal PostgreSQL password assignment"
+regex = '''(?i)\bPGPASSWORD\s*=\s*["']?([A-Za-z0-9/+_.!@#%&^:-]{3,128})'''
+secretGroup = 1
